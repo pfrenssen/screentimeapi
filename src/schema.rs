@@ -4,7 +4,7 @@ diesel::table! {
     adjustment_type (id) {
         id -> Unsigned<Bigint>,
         #[max_length = 255]
-        name -> Varchar,
+        description -> Varchar,
         adjustment -> Tinyint,
     }
 }

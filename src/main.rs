@@ -8,13 +8,14 @@ mod db;
 fn main() {
     let cli = Cli::parse();
 
-    // You can check for the existence of subcommands, and if found use their
-    // matches just as you would the top level cmd
     match &cli.command {
         Some(Commands::AdjustmentType { command }) => {
             match command {
                 Some(AdjustmentTypeCommands::List { limit }) => {
                     list_adjustment_types(*limit);
+                }
+                Some(AdjustmentTypeCommands::Add { description, adjustment }) => {
+                    db::add_adjustment_type(description, *adjustment);
                 }
                 None => {}
             }
@@ -60,5 +61,15 @@ enum AdjustmentTypeCommands {
         /// The maximum number of adjustment types to return.
         #[arg(short, long)]
         limit: Option<u8>,
-    }
+    },
+    /// Adds a new adjustment type.
+    Add {
+        /// The description of the adjustment type.
+        #[arg(short, long)]
+        description: String,
+
+        /// The adjustment value of the adjustment type.
+        #[arg(short, long)]
+        adjustment: i8,
+    },
 }

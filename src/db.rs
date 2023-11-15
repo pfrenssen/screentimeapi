@@ -1,4 +1,4 @@
-use diesel::{Connection, MysqlConnection};
+use diesel::{Connection, MysqlConnection, QueryDsl, RunQueryDsl, SelectableHelper};
 use dotenvy::dotenv;
 use std::env;
 use crate::models::AdjustmentType;
@@ -13,7 +13,6 @@ pub fn establish_connection() -> MysqlConnection {
 
 /// Returns a list of adjustment types.
 pub fn get_adjustment_types(limit: Option<u8>) -> Vec<AdjustmentType> {
-    use diesel::{QueryDsl, RunQueryDsl, SelectableHelper};
     use crate::schema::adjustment_type::dsl::*;
 
     let connection = &mut establish_connection();
@@ -22,4 +21,20 @@ pub fn get_adjustment_types(limit: Option<u8>) -> Vec<AdjustmentType> {
         .select(AdjustmentType::as_select())
         .load(connection)
         .expect("Error loading adjustment types")
+}
+
+/// Adds a new adjustment type.
+pub fn add_adjustment_type(description: &str, adjustment: i8) -> usize {
+    //use crate::schema::adjustment_type::dsl::*;
+
+    let connection = &mut establish_connection();
+    let new_adjustment_type = crate::models::NewAdjustmentType {
+        description,
+        adjustment,
+    };
+
+    diesel::insert_into(crate::schema::adjustment_type::table)
+        .values(&new_adjustment_type)
+        .execute(connection)
+        .expect("Error inserting adjustment type")
 }

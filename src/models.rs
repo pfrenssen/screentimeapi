@@ -6,6 +6,13 @@ use tabled::Tabled;
 #[diesel(check_for_backend(diesel::mysql::Mysql))]
 pub struct AdjustmentType {
     pub id: u64,
-    pub name: String,
+    pub description: String,
+    pub adjustment: i8,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = crate::schema::adjustment_type)]
+pub struct NewAdjustmentType<'a> {
+    pub description: &'a str,
     pub adjustment: i8,
 }
