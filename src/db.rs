@@ -25,8 +25,6 @@ pub fn get_adjustment_types(limit: Option<u8>) -> Vec<AdjustmentType> {
 
 /// Adds a new adjustment type.
 pub fn add_adjustment_type(description: &str, adjustment: i8) -> usize {
-    //use crate::schema::adjustment_type::dsl::*;
-
     let connection = &mut establish_connection();
     let new_adjustment_type = crate::models::NewAdjustmentType {
         description,
