@@ -1,0 +1,6 @@
+CREATE TABLE adjustment (
+  id SERIAL PRIMARY KEY,
+  adjustment_type_id BIGINT UNSIGNED NOT NULL,
+  created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  comment VARCHAR(255)
+);
