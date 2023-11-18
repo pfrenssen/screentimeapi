@@ -1,6 +1,9 @@
 screentimeapi
 =============
 
+This is a personal project that provides an API to keep track of how much
+screen time a child has earned by doing their chores. The available screen time
+can be adjusted upwards or downwards depending on whether they did their chores.
 
 Requirements
 ------------
