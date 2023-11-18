@@ -4,8 +4,10 @@ use tabled::settings::Style;
 pub mod models;
 pub mod schema;
 mod db;
+mod web;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
@@ -31,6 +33,7 @@ fn main() {
                 None => {}
             }
         }
+        Some(Commands::Serve) => web::serve().await,
         None => {}
     }
 }
@@ -87,6 +90,8 @@ enum Commands {
         #[command(subcommand)]
         command: Option<AdjustmentTypeCommands>,
     },
+    /// Starts the web server.
+    Serve
 }
 
 #[derive(Subcommand)]

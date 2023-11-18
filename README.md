@@ -42,3 +42,13 @@ Usage
 ```
 $ screentimeapi --help
 ```
+
+### REST API
+
+Start the server.
+```
+$ screentimeapi serve
+```
+
+Routes:
+- http://localhost:3000/ - returns the API version.

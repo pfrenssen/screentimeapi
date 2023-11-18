@@ -19,8 +19,6 @@ diesel::table! {
     }
 }
 
-diesel::joinable!(adjustment -> adjustment_type (adjustment_type_id));
-
 diesel::allow_tables_to_appear_in_same_query!(
     adjustment,
     adjustment_type,
