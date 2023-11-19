@@ -39,13 +39,19 @@ pub fn add_adjustment_type(description: String, adjustment: i8) -> usize {
 }
 
 /// Returns a list of adjustments.
-pub fn get_adjustments(limit: Option<u8>) -> Vec<Adjustment> {
-    use crate::schema::adjustment::dsl::*;
+pub fn get_adjustments(limit: Option<u8>, at_id: Option<u64>) -> Vec<Adjustment> {
+    use crate::schema::adjustment::dsl;
 
     let connection = &mut establish_connection();
-    adjustment
+    let mut query = dsl::adjustment.into_boxed();
+
+    // Optionally filter by adjustment type ID.
+    if let Some(at_id) = at_id {
+        query = query.filter(dsl::adjustment_type_id.eq(at_id));
+    }
+    query
         .limit(limit.unwrap_or(10) as i64)
-        .order(created.desc())
+        .order(dsl::created.desc())
         .select(Adjustment::as_select())
         .load(connection)
         .expect("Error loading adjustments")

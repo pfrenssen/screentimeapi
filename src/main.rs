@@ -24,8 +24,8 @@ async fn main() {
         }
         Some(Commands::Adjustment { command }) => {
             match command {
-                Some(AdjustmentCommands::List { limit }) => {
-                    list_adjustments(*limit);
+                Some(AdjustmentCommands::List { limit, adjustment_type_id }) => {
+                    list_adjustments(*limit, *adjustment_type_id);
                 }
                 Some(AdjustmentCommands::Add { adjustment_type_id, comment }) => {
                     add_adjustment(*adjustment_type_id, comment.as_deref());
@@ -39,8 +39,8 @@ async fn main() {
 }
 
 /// Lists the available adjustments.
-fn list_adjustments(limit: Option<u8>) {
-    let results = db::get_adjustments(limit);
+fn list_adjustments(limit: Option<u8>, adjustment_type_id: Option<u64>) {
+    let results = db::get_adjustments(limit, adjustment_type_id);
 
     // Output results as a table.
     let mut table = tabled::Table::new(results);
@@ -102,6 +102,9 @@ enum AdjustmentCommands {
         /// The maximum number of adjustments to return.
         #[arg(short, long)]
         limit: Option<u8>,
+        /// Filters the adjustments by the given adjustment type ID.
+        #[arg(short, long)]
+        adjustment_type_id: Option<u64>,
     },
     /// Adds a new adjustment.
     Add {
