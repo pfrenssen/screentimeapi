@@ -24,7 +24,8 @@ pub fn get_adjustment_types(limit: Option<u8>) -> Vec<AdjustmentType> {
 }
 
 /// Adds a new adjustment type.
-pub fn add_adjustment_type(description: &str, adjustment: i8) -> usize {
+/// Returns the number of inserted rows.
+pub fn add_adjustment_type(description: String, adjustment: i8) -> usize {
     let connection = &mut establish_connection();
     let new_adjustment_type = crate::models::NewAdjustmentType {
         description,

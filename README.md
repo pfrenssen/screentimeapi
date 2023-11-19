@@ -50,5 +50,10 @@ Start the server.
 $ screentimeapi serve
 ```
 
+To do POST requests, set the `Content-Type: application/json` header, and pass
+the data in a JSON request body.
+
 Routes:
-- http://localhost:3000/ - returns the API version.
+- / - GET: returns the API version.
+- /adjustment-types - GET: returns a list of all adjument types.
+- /adjustment-types - POST: create an adjustment type.

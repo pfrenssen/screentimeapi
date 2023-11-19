@@ -17,7 +17,7 @@ async fn main() {
                     list_adjustment_types(*limit);
                 }
                 Some(AdjustmentTypeCommands::Add { description, adjustment }) => {
-                    db::add_adjustment_type(description, *adjustment);
+                    db::add_adjustment_type(description.clone(), *adjustment);
                 }
                 None => {}
             }

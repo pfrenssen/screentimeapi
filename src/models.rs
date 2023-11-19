@@ -1,7 +1,8 @@
 use diesel::prelude::*;
+use serde::{Deserialize, Serialize};
 use tabled::Tabled;
 
-#[derive(Queryable, Selectable, Tabled)]
+#[derive(Queryable, Selectable, Serialize, Tabled)]
 #[diesel(table_name = crate::schema::adjustment_type)]
 #[diesel(check_for_backend(diesel::mysql::Mysql))]
 pub struct AdjustmentType {
@@ -10,10 +11,10 @@ pub struct AdjustmentType {
     pub adjustment: i8,
 }
 
-#[derive(Insertable)]
+#[derive(Deserialize, Insertable)]
 #[diesel(table_name = crate::schema::adjustment_type)]
-pub struct NewAdjustmentType<'a> {
-    pub description: &'a str,
+pub struct NewAdjustmentType {
+    pub description: String,
     pub adjustment: i8,
 }
 
