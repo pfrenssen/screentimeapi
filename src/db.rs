@@ -38,6 +38,26 @@ pub fn add_adjustment_type(description: String, adjustment: i8) -> usize {
         .expect("Error inserting adjustment type")
 }
 
+/// Deletes the adjustment type with the given ID.
+/// If there are still adjustments referencing this adjustment type, the deletion will fail.
+/// Todo: return a proper error type.
+pub fn delete_adjustment_type(id: u64) -> Result<usize, String> {
+    let connection = &mut establish_connection();
+
+    // Check if there are still adjustments referencing this adjustment type.
+    let adjustments = get_adjustments(None, Some(id));
+    if adjustments.len() > 0 {
+        return Err(format!("There are still adjustments referencing adjustment type {}", id));
+    }
+
+    let result = diesel::delete(crate::schema::adjustment_type::table.find(id))
+        .execute(connection);
+    match result {
+        Ok(rows_deleted) => Ok(rows_deleted),
+        Err(e) => Err(format!("Error deleting adjustment type: {}", e)),
+    }
+}
+
 /// Returns a list of adjustments.
 pub fn get_adjustments(limit: Option<u8>, at_id: Option<u64>) -> Vec<Adjustment> {
     use crate::schema::adjustment::dsl;

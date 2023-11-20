@@ -10,6 +10,7 @@ mod web;
 async fn main() {
     let cli = Cli::parse();
 
+    // Todo: Return an exit code if the command failed.
     match &cli.command {
         Some(Commands::AdjustmentType { command }) => {
             match command {
@@ -18,6 +19,13 @@ async fn main() {
                 }
                 Some(AdjustmentTypeCommands::Add { description, adjustment }) => {
                     db::add_adjustment_type(description.clone(), *adjustment);
+                }
+                Some(AdjustmentTypeCommands::Delete { id }) => {
+                    let result = db::delete_adjustment_type(*id);
+                    match result {
+                        Ok(rows_deleted) => println!("Deleted {} adjustment type(s)", rows_deleted),
+                        Err(e) => println!("Error: {}", e),
+                    }
                 }
                 None => {}
             }
@@ -136,5 +144,11 @@ enum AdjustmentTypeCommands {
         /// The adjustment value of the adjustment type.
         #[arg(short, long)]
         adjustment: i8,
+    },
+    /// Deletes the adjustment type with the given ID.
+    Delete {
+        /// The ID of the adjustment type to delete.
+        #[arg(short, long)]
+        id: u64,
     },
 }
