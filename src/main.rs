@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use tabled::settings::Style;
+use crate::db::AdjustmentQueryFilter;
 
 pub mod models;
 pub mod schema;
@@ -33,7 +34,10 @@ async fn main() {
         Some(Commands::Adjustment { command }) => {
             match command {
                 Some(AdjustmentCommands::List { limit, adjustment_type_id }) => {
-                    list_adjustments(*limit, *adjustment_type_id);
+                    list_adjustments(AdjustmentQueryFilter {
+                        limit: *limit,
+                        atid: *adjustment_type_id,
+                    });
                 }
                 Some(AdjustmentCommands::Add { adjustment_type_id, comment }) => {
                     add_adjustment(*adjustment_type_id, comment.as_deref());
@@ -47,8 +51,8 @@ async fn main() {
 }
 
 /// Lists the available adjustments.
-fn list_adjustments(limit: Option<u8>, adjustment_type_id: Option<u64>) {
-    let results = db::get_adjustments(limit, adjustment_type_id);
+fn list_adjustments(filter: AdjustmentQueryFilter) {
+    let results = db::get_adjustments(filter);
 
     // Output results as a table.
     let mut table = tabled::Table::new(results);

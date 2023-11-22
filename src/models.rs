@@ -18,7 +18,7 @@ pub struct NewAdjustmentType {
     pub adjustment: i8,
 }
 
-#[derive(Associations, Queryable, Selectable, Tabled)]
+#[derive(Associations, Queryable, Selectable, Serialize, Tabled)]
 #[diesel(table_name = crate::schema::adjustment)]
 #[diesel(check_for_backend(diesel::mysql::Mysql))]
 #[diesel(belongs_to(AdjustmentType))]

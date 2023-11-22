@@ -1,0 +1,37 @@
+@hostname=localhost
+@port=3000
+
+###
+# Returns the application version.
+GET http://{{hostname}}:{{port}}/
+
+###
+# Returns a list of adjustment types.
+GET http://{{hostname}}:{{port}}/adjustment-types
+
+
+###
+# Creates a new adjustment type.
+POST http://{{hostname}}:{{port}}/adjustment-types
+Content-Type: application/json
+
+{
+  "description": "Cleaned room",
+  "adjustment": 2
+}
+
+###
+# Retrieves a single adjustment type.
+GET http://{{hostname}}:{{port}}/adjustment-types/1
+
+###
+# Deletes an adjustment type.
+DELETE http://{{hostname}}:{{port}}/adjustment-types/8
+
+###
+# Lists available adjustments.
+GET http://{{hostname}}:{{port}}/adjustments
+
+###
+# Lists available adjustments of type 1, limited to 10 results.
+GET http://{{hostname}}:{{port}}/adjustments?type=1&limit=10

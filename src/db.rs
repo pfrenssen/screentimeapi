@@ -1,6 +1,7 @@
 use diesel::{Connection, ExpressionMethods, MysqlConnection, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use dotenvy::dotenv;
 use std::env;
+use serde::Deserialize;
 use crate::models::{Adjustment, AdjustmentType};
 
 pub fn establish_connection() -> MysqlConnection {
@@ -58,7 +59,10 @@ pub fn delete_adjustment_type(id: u64) -> Result<usize, String> {
     let connection = &mut establish_connection();
 
     // Check if there are still adjustments referencing this adjustment type.
-    let adjustments = get_adjustments(None, Some(id));
+    let adjustments = get_adjustments(AdjustmentQueryFilter {
+        limit: None,
+        atid: Some(id),
+    });
     if adjustments.len() > 0 {
         return Err(format!("There are still adjustments referencing adjustment type {}", id));
     }
@@ -71,19 +75,29 @@ pub fn delete_adjustment_type(id: u64) -> Result<usize, String> {
     }
 }
 
+/// A filter for the get_adjustments function.
+#[derive(Deserialize)]
+pub struct AdjustmentQueryFilter {
+    // The number of adjustments to return. Defaults to 10.
+    pub limit: Option<u8>,
+    // Optionally filter by adjustment type ID.
+    #[serde(rename(deserialize = "type"))]
+    pub atid: Option<u64>,
+}
+
 /// Returns a list of adjustments.
-pub fn get_adjustments(limit: Option<u8>, at_id: Option<u64>) -> Vec<Adjustment> {
+pub fn get_adjustments(filter: AdjustmentQueryFilter) -> Vec<Adjustment> {
     use crate::schema::adjustment::dsl;
 
     let connection = &mut establish_connection();
     let mut query = dsl::adjustment.into_boxed();
 
     // Optionally filter by adjustment type ID.
-    if let Some(at_id) = at_id {
+    if let Some(at_id) = filter.atid {
         query = query.filter(dsl::adjustment_type_id.eq(at_id));
     }
     query
-        .limit(limit.unwrap_or(10) as i64)
+        .limit(filter.limit.unwrap_or(10) as i64)
         .order(dsl::created.desc())
         .select(Adjustment::as_select())
         .load(connection)

@@ -8,7 +8,7 @@ use axum::{
     routing::{delete, get, post},
     Router
 };
-use axum::extract::Path;
+use axum::extract::{Path, Query};
 use dotenvy::dotenv;
 use crate::db;
 use crate::models::NewAdjustmentType;
@@ -34,6 +34,7 @@ async fn get_app() -> Router {
         .route("/adjustment-types", post(create_adjustment_type))
         .route("/adjustment-types/:id", get(get_adjustment_type))
         .route("/adjustment-types/:id", delete(delete_adjustment_type))
+        .route("/adjustments", get(list_adjustments))
 }
 
 // Handler for the main API endpoint. Returns the version of the API as a JSON object.
@@ -98,4 +99,11 @@ async fn delete_adjustment_type(Path(id): Path<u64>) -> impl IntoResponse {
             (StatusCode::BAD_REQUEST, response)
         }
     }
+}
+
+// GET handler: lists the available adjustments, optionally filtered by adjustment type and limit.
+async fn list_adjustments(Query(filter): Query<db::AdjustmentQueryFilter>) -> impl IntoResponse {
+    let adjustments = db::get_adjustments(filter);
+    let response = Response::new(Body::from(serde_json::to_string(&adjustments).unwrap()));
+    (StatusCode::OK, response)
 }
