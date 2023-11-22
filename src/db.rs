@@ -1,4 +1,4 @@
-use diesel::{Connection, ExpressionMethods, MysqlConnection, QueryDsl, RunQueryDsl, SelectableHelper};
+use diesel::{Connection, ExpressionMethods, MysqlConnection, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use dotenvy::dotenv;
 use std::env;
 use crate::models::{Adjustment, AdjustmentType};
@@ -9,6 +9,19 @@ pub fn establish_connection() -> MysqlConnection {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     MysqlConnection::establish(&database_url)
         .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+}
+
+/// Returns a single adjustment type.
+pub fn get_adjustment_type(atid: u64) -> Option<AdjustmentType> {
+    use crate::schema::adjustment_type::dsl::*;
+
+    let connection = &mut establish_connection();
+    adjustment_type
+        .find(atid)
+        .select(AdjustmentType::as_select())
+        .first(connection)
+        .optional()
+        .expect("Error loading adjustment type")
 }
 
 /// Returns a list of adjustment types.

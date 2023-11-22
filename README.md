@@ -56,4 +56,6 @@ the data in a JSON request body.
 Routes:
 - / - GET: returns the API version.
 - /adjustment-types - GET: returns a list of all adjument types.
-- /adjustment-types - POST: create an adjustment type.
+- /adjustment-types - POST: creates an adjustment type.
+- /adjustment-types/:id - GET: returns the adjustment type with the given ID.
+- /adjustment-types/:id - DELETE: deletes the adjustment type with the given ID.

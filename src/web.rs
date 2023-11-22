@@ -5,9 +5,10 @@ use axum::{
     extract::Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Router
 };
+use axum::extract::Path;
 use dotenvy::dotenv;
 use crate::db;
 use crate::models::NewAdjustmentType;
@@ -31,6 +32,8 @@ async fn get_app() -> Router {
         .route("/", get(index))
         .route("/adjustment-types", get(list_adjustment_types))
         .route("/adjustment-types", post(create_adjustment_type))
+        .route("/adjustment-types/:id", get(get_adjustment_type))
+        .route("/adjustment-types/:id", delete(delete_adjustment_type))
 }
 
 // Handler for the main API endpoint. Returns the version of the API as a JSON object.
@@ -47,10 +50,52 @@ async fn list_adjustment_types() -> impl IntoResponse {
     (StatusCode::OK, response)
 }
 
+// GET handler: shows the adjustment type with the given ID.
+async fn get_adjustment_type(Path(id): Path<u64>) -> impl IntoResponse {
+    let adjustment_type = db::get_adjustment_type(id);
+    // Return a 404 if the adjustment type does not exist.
+    match adjustment_type {
+        Some(adjustment_type) => {
+            let response = Response::new(Body::from(serde_json::to_string(&adjustment_type).unwrap()));
+            (StatusCode::OK, response)
+        }
+        None => {
+            let response = Response::new(Body::from(format!("{{\"error\": \"Adjustment type with ID {} not found\"}}", id)));
+            (StatusCode::NOT_FOUND, response)
+        }
+    }
+}
+
 // POST handler: creates a new adjustment type.
 async fn create_adjustment_type(Json(payload): Json<NewAdjustmentType>) -> impl IntoResponse {
     let rows_inserted = db::add_adjustment_type(payload.description, payload.adjustment);
     // Respond with the number of inserted rows.
     let response = Response::new(Body::from(format!("{{\"inserted\": \"{}\"}}", rows_inserted)));
     (StatusCode::CREATED, response)
+}
+
+// DELETE handler: deletes the adjustment type with the given ID.
+async fn delete_adjustment_type(Path(id): Path<u64>) -> impl IntoResponse {
+    // Return a 404 if the adjustment type does not exist.
+    let adjustment_type = db::get_adjustment_type(id);
+    match adjustment_type {
+        None => {
+            let response = Response::new(Body::from(format!("{{\"error\": \"Adjustment type with ID {} not found\"}}", id)));
+            return (StatusCode::NOT_FOUND, response);
+        }
+        _ => {}
+    }
+    let result = db::delete_adjustment_type(id);
+    match result {
+        Ok(rows_deleted) => {
+            // Respond with the number of deleted rows.
+            let response = Response::new(Body::from(format!("{{\"deleted\": \"{}\"}}", rows_deleted)));
+            (StatusCode::OK, response)
+        }
+        Err(e) => {
+            // Respond with an error message.
+            let response = Response::new(Body::from(format!("{{\"error\": \"{}\"}}", e)));
+            (StatusCode::BAD_REQUEST, response)
+        }
+    }
 }
