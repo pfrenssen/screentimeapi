@@ -1,23 +1,25 @@
-use std::env;
-use std::net::SocketAddr;
+use crate::db;
+use crate::models::{NewAdjustment, NewAdjustmentType};
+use axum::extract::{Path, Query};
 use axum::{
     body::Body,
     extract::Json,
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
-    Router
+    Router,
 };
-use axum::extract::{Path, Query};
 use dotenvy::dotenv;
-use crate::db;
-use crate::models::{NewAdjustment, NewAdjustmentType};
+use std::env;
+use std::net::SocketAddr;
 
 pub async fn serve() {
     dotenv().ok();
     let address = env::var("SERVER_ADDRESS").expect("SERVER_ADDRESS must be set");
     let port = env::var("SERVER_PORT").expect("SERVER_PORT must be set");
-    let socket_address: SocketAddr = format!("{address}:{port}").parse().expect("Unable to create a valid socket address.");
+    let socket_address: SocketAddr = format!("{address}:{port}")
+        .parse()
+        .expect("Unable to create a valid socket address.");
 
     let app = async { get_app() };
     axum::Server::bind(&socket_address)
@@ -48,7 +50,9 @@ async fn index() -> impl IntoResponse {
 // GET handler: lists the available adjustment types.
 async fn list_adjustment_types() -> impl IntoResponse {
     let adjustment_types = db::get_adjustment_types(None);
-    let response = Response::new(Body::from(serde_json::to_string(&adjustment_types).unwrap()));
+    let response = Response::new(Body::from(
+        serde_json::to_string(&adjustment_types).unwrap(),
+    ));
     (StatusCode::OK, response)
 }
 
@@ -60,7 +64,9 @@ async fn get_adjustment_type(Path(id): Path<u64>) -> impl IntoResponse {
         let response = Response::new(Body::from(serde_json::to_string(&adjustment_type).unwrap()));
         (StatusCode::OK, response)
     } else {
-        let response = Response::new(Body::from(format!("{{\"error\": \"Adjustment type with ID {id} not found\"}}")));
+        let response = Response::new(Body::from(format!(
+            "{{\"error\": \"Adjustment type with ID {id} not found\"}}"
+        )));
         (StatusCode::NOT_FOUND, response)
     }
 }
@@ -78,7 +84,9 @@ async fn delete_adjustment_type(Path(id): Path<u64>) -> impl IntoResponse {
     // Return a 404 if the adjustment type does not exist.
     let adjustment_type = db::get_adjustment_type(id);
     if adjustment_type.is_none() {
-        let response = Response::new(Body::from(format!("{{\"error\": \"Adjustment type with ID {id} not found\"}}")));
+        let response = Response::new(Body::from(format!(
+            "{{\"error\": \"Adjustment type with ID {id} not found\"}}"
+        )));
         return (StatusCode::NOT_FOUND, response);
     }
 
@@ -86,7 +94,8 @@ async fn delete_adjustment_type(Path(id): Path<u64>) -> impl IntoResponse {
     match result {
         Ok(rows_deleted) => {
             // Respond with the number of deleted rows.
-            let response = Response::new(Body::from(format!("{{\"deleted\": \"{rows_deleted}\"}}")));
+            let response =
+                Response::new(Body::from(format!("{{\"deleted\": \"{rows_deleted}\"}}")));
             (StatusCode::OK, response)
         }
         Err(e) => {
@@ -107,16 +116,17 @@ async fn list_adjustments(Query(filter): Query<db::AdjustmentQueryFilter>) -> im
 // POST handler: creates a new adjustment.
 async fn create_adjustment(Json(payload): Json<NewAdjustment>) -> impl IntoResponse {
     let adjustment_type = db::get_adjustment_type(payload.adjustment_type_id);
-    match adjustment_type {
-        Some(adjustment_type) => {
-            db::add_adjustment(&adjustment_type, &payload.comment);
-            let response = Response::new(Body::from(format!("{{\"inserted\": \"1\"}}")));
-            (StatusCode::CREATED, response)
-        }
+    if let Some(adjustment_type) = adjustment_type {
+        let rows_inserted = db::add_adjustment(&adjustment_type, &payload.comment);
+        // Respond with the number of inserted rows.
+        let response = Response::new(Body::from(format!("{{\"inserted\": \"{rows_inserted}\"}}")));
+        (StatusCode::CREATED, response)
+    } else {
         // Return a 404 if the adjustment type does not exist.
-        None => {
-            let response = Response::new(Body::from(format!("{{\"error\": \"Adjustment type with ID {} not found\"}}", payload.adjustment_type_id)));
-            (StatusCode::NOT_FOUND, response)
-        }
+        let response = Response::new(Body::from(format!(
+            "{{\"error\": \"Adjustment type with ID {} not found\"}}",
+            payload.adjustment_type_id
+        )));
+        (StatusCode::NOT_FOUND, response)
     }
 }

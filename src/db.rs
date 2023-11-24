@@ -1,8 +1,11 @@
-use diesel::{Connection, ExpressionMethods, MysqlConnection, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
-use dotenvy::dotenv;
-use std::env;
-use serde::Deserialize;
 use crate::models::{Adjustment, AdjustmentType};
+use diesel::{
+    Connection, ExpressionMethods, MysqlConnection, OptionalExtension, QueryDsl, RunQueryDsl,
+    SelectableHelper,
+};
+use dotenvy::dotenv;
+use serde::Deserialize;
+use std::env;
 
 pub fn establish_connection() -> MysqlConnection {
     dotenv().ok();
@@ -64,11 +67,12 @@ pub fn delete_adjustment_type(id: u64) -> Result<usize, String> {
         atid: Some(id),
     });
     if !adjustments.is_empty() {
-        return Err(format!("There are still adjustments referencing adjustment type {id}"));
+        return Err(format!(
+            "There are still adjustments referencing adjustment type {id}"
+        ));
     }
 
-    let result = diesel::delete(crate::schema::adjustment_type::table.find(id))
-        .execute(connection);
+    let result = diesel::delete(crate::schema::adjustment_type::table.find(id)).execute(connection);
     match result {
         Ok(rows_deleted) => Ok(rows_deleted),
         Err(e) => Err(format!("Error deleting adjustment type: {e}")),
@@ -116,4 +120,41 @@ pub fn add_adjustment(adjustment_type: &AdjustmentType, comment: &Option<String>
         .values(&new_adjustment)
         .execute(connection)
         .expect("Error inserting adjustment")
+}
+
+/// Returns the current time entry.
+pub fn get_current_time_entry() -> Option<crate::models::TimeEntry> {
+    use crate::schema::time_entry::dsl;
+
+    let connection = &mut establish_connection();
+    dsl::time_entry
+        .order(dsl::created.desc())
+        .select(crate::models::TimeEntry::as_select())
+        .first(connection)
+        .optional()
+        .expect("Error loading time entry")
+}
+
+/// Returns a list of time entries.
+pub fn get_time_entries(limit: Option<u8>) -> Vec<crate::models::TimeEntry> {
+    use crate::schema::time_entry::dsl;
+
+    let connection = &mut establish_connection();
+    dsl::time_entry
+        .limit(i64::from(limit.unwrap_or(10)))
+        .order(dsl::created.desc())
+        .select(crate::models::TimeEntry::as_select())
+        .load(connection)
+        .expect("Error loading time entries")
+}
+
+/// Adds a new time entry.
+pub fn add_time_entry(time: u16) -> usize {
+    let connection = &mut establish_connection();
+    let new_time_entry = crate::models::NewTimeEntry { time };
+
+    diesel::insert_into(crate::schema::time_entry::table)
+        .values(&new_time_entry)
+        .execute(connection)
+        .expect("Error inserting time entry")
 }

@@ -19,7 +19,12 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(
-    adjustment,
-    adjustment_type,
-);
+diesel::table! {
+    time_entry (id) {
+        id -> Unsigned<Bigint>,
+        time -> Unsigned<Smallint>,
+        created -> Timestamp,
+    }
+}
+
+diesel::allow_tables_to_appear_in_same_query!(adjustment, adjustment_type,);
