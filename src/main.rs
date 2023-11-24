@@ -36,10 +36,12 @@ async fn main() {
             Some(AdjustmentCommands::List {
                 limit,
                 adjustment_type_id,
+                since,
             }) => {
                 list_adjustments(&AdjustmentQueryFilter {
                     limit: *limit,
                     atid: *adjustment_type_id,
+                    since: since.map(|d| d.and_hms_opt(0, 0, 0).unwrap()),
                 });
             }
             Some(AdjustmentCommands::Add {
@@ -157,6 +159,9 @@ enum AdjustmentCommands {
         /// Filters the adjustments by the given adjustment type ID.
         #[arg(short, long)]
         adjustment_type_id: Option<u64>,
+        /// Return only adjustments created after the given date.
+        #[arg(short, long)]
+        since: Option<chrono::NaiveDate>,
     },
     /// Adds a new adjustment.
     Add {

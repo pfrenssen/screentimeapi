@@ -1,10 +1,12 @@
 use crate::models::{Adjustment, AdjustmentType};
+use chrono::NaiveDateTime;
 use diesel::{
     Connection, ExpressionMethods, MysqlConnection, OptionalExtension, QueryDsl, RunQueryDsl,
     SelectableHelper,
 };
 use dotenvy::dotenv;
 use serde::Deserialize;
+use std::default::Default;
 use std::env;
 
 pub fn establish_connection() -> MysqlConnection {
@@ -62,10 +64,11 @@ pub fn delete_adjustment_type(id: u64) -> Result<usize, String> {
     let connection = &mut establish_connection();
 
     // Check if there are still adjustments referencing this adjustment type.
-    let adjustments = get_adjustments(&AdjustmentQueryFilter {
-        limit: None,
+    let filter = AdjustmentQueryFilter {
         atid: Some(id),
-    });
+        ..Default::default()
+    };
+    let adjustments = get_adjustments(&filter);
     if !adjustments.is_empty() {
         return Err(format!(
             "There are still adjustments referencing adjustment type {id}"
@@ -80,13 +83,14 @@ pub fn delete_adjustment_type(id: u64) -> Result<usize, String> {
 }
 
 /// A filter for the `get_adjustments()` function.
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 pub struct AdjustmentQueryFilter {
     // The number of adjustments to return. Defaults to 10.
     pub limit: Option<u8>,
     // Optionally filter by adjustment type ID.
     #[serde(rename(deserialize = "type"))]
     pub atid: Option<u64>,
+    pub since: Option<NaiveDateTime>,
 }
 
 /// Returns a list of adjustments.
@@ -100,6 +104,12 @@ pub fn get_adjustments(filter: &AdjustmentQueryFilter) -> Vec<Adjustment> {
     if let Some(at_id) = filter.atid {
         query = query.filter(dsl::adjustment_type_id.eq(at_id));
     }
+
+    // Optionally filter by `since` date.
+    if let Some(since) = filter.since {
+        query = query.filter(dsl::created.ge(since));
+    }
+
     query
         .limit(i64::from(filter.limit.unwrap_or(10)))
         .order(dsl::created.desc())
