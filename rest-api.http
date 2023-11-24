@@ -49,3 +49,7 @@ Content-Type: application/json
   "type": 1,
   "description": "Mathematics"
 }
+
+###
+# Retrieves the current adjusted time.
+GET http://{{hostname}}:{{port}}/time

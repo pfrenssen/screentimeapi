@@ -13,6 +13,7 @@ async fn main() {
 
     // Todo: Return an exit code if the command failed.
     match &cli.command {
+        None => {}
         Some(Commands::AdjustmentType { command }) => match command {
             Some(AdjustmentTypeCommands::List { limit }) => {
                 list_adjustment_types(*limit);
@@ -53,9 +54,12 @@ async fn main() {
             None => {}
         },
         Some(Commands::Serve) => web::serve().await,
+        Some(Commands::Time) => {
+            print_adjusted_time();
+        }
         Some(Commands::TimeEntry { command }) => match command {
             Some(TimeEntryCommands::Current) => {
-                print_current_time();
+                print_current_time_entry();
             }
             Some(TimeEntryCommands::List { limit }) => {
                 list_time_entries(*limit);
@@ -65,7 +69,6 @@ async fn main() {
             }
             None => {}
         },
-        None => {}
     }
 }
 
@@ -99,8 +102,17 @@ fn list_adjustment_types(limit: Option<u8>) {
     println!("{table}");
 }
 
+/// Prints the current, adjusted time.
+///
+/// This calculates the current time by taking the most recent time entry and adding all adjustments
+/// to it.
+fn print_adjusted_time() {
+    let adjusted_time = db::get_adjusted_time();
+    println!("{:01}:{:02}", adjusted_time / 60, adjusted_time % 60);
+}
+
 /// Prints the current time.
-fn print_current_time() {
+fn print_current_time_entry() {
     let time_entry = db::get_current_time_entry();
     if let Some(time_entry) = time_entry {
         println!("{time_entry}");
@@ -141,6 +153,8 @@ enum Commands {
     },
     /// Starts the web server.
     Serve,
+    /// Returns the current screen time.
+    Time,
     /// Commands related to time entries.
     TimeEntry {
         #[command(subcommand)]

@@ -6,6 +6,7 @@ use diesel::{
 };
 use dotenvy::dotenv;
 use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 use std::default::Default;
 use std::env;
 
@@ -167,4 +168,64 @@ pub fn add_time_entry(time: u16) -> usize {
         .values(&new_time_entry)
         .execute(connection)
         .expect("Error inserting time entry")
+}
+
+pub fn get_adjusted_time() -> u16 {
+    // Get the most recent time entry.
+    let time_entry = get_current_time_entry();
+
+    // If there is no time entry, start calculating from 0.
+    let mut adjusted_time: i32 = match &time_entry {
+        None => 0,
+        Some(time_entry) => i32::from(time_entry.time),
+    };
+
+    // Retrieve all adjustments that were created since the most recent time entry. If we don't have
+    // a time entry, yet retrieve all adjustments.
+    let filter = match &time_entry {
+        None => AdjustmentQueryFilter::default(),
+        Some(time_entry) => AdjustmentQueryFilter {
+            since: Some(time_entry.created),
+            ..Default::default()
+        },
+    };
+    let adjustments = get_adjustments(&filter);
+
+    // Retrieve the adjustment types for the given adjustments.
+    let adjustment_types = get_adjustment_types_for_adjustments(&adjustments);
+
+    // Calculate the adjusted time.
+    for adjustment in adjustments {
+        let adjustment_type = adjustment_types
+            .get(&adjustment.adjustment_type_id)
+            .unwrap();
+        adjusted_time += i32::from(adjustment_type.adjustment);
+    }
+
+    // Convert the adjusted time to a u16. If it is lower than 0, return 0.
+    if adjusted_time < 0 {
+        0
+    } else {
+        u16::try_from(adjusted_time).unwrap()
+    }
+}
+
+/// Returns a map of adjustment types that correspond to the given adjustments.
+pub fn get_adjustment_types_for_adjustments(
+    adjustments: &[Adjustment],
+) -> HashMap<u64, AdjustmentType> {
+    // Get a list of unique adjustment type IDs from the given adjustments.
+    let adjustment_type_ids: HashSet<u64> =
+        adjustments.iter().map(|a| a.adjustment_type_id).collect();
+
+    // Fetch the adjustment types for the given adjustment type IDs.
+    let connection = &mut establish_connection();
+    let adjustment_types = crate::schema::adjustment_type::table
+        .filter(crate::schema::adjustment_type::dsl::id.eq_any(adjustment_type_ids))
+        .select(AdjustmentType::as_select())
+        .load(connection)
+        .expect("Error loading adjustment types");
+
+    // Create a map of adjustment type IDs to adjustment types.
+    adjustment_types.into_iter().map(|at| (at.id, at)).collect()
 }
