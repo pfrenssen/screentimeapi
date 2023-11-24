@@ -37,6 +37,10 @@ GET http://{{hostname}}:{{port}}/adjustments
 GET http://{{hostname}}:{{port}}/adjustments?type=1&limit=10
 
 ###
+# Lists available adjustments since 2015-01-01.
+GET http://{{hostname}}:{{port}}/adjustments?since=2023-11-21T00:00:00
+
+###
 # Creates a new adjustment.
 POST http://{{hostname}}:{{port}}/adjustments
 Content-Type: application/json
