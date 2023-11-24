@@ -24,8 +24,8 @@ async fn main() {
                 Some(AdjustmentTypeCommands::Delete { id }) => {
                     let result = db::delete_adjustment_type(*id);
                     match result {
-                        Ok(rows_deleted) => println!("Deleted {} adjustment type(s)", rows_deleted),
-                        Err(e) => println!("Error: {}", e),
+                        Ok(rows_deleted) => println!("Deleted {rows_deleted} adjustment type(s)"),
+                        Err(e) => println!("Error: {e}"),
                     }
                 }
                 None => {}
@@ -34,7 +34,7 @@ async fn main() {
         Some(Commands::Adjustment { command }) => {
             match command {
                 Some(AdjustmentCommands::List { limit, adjustment_type_id }) => {
-                    list_adjustments(AdjustmentQueryFilter {
+                    list_adjustments(&AdjustmentQueryFilter {
                         limit: *limit,
                         atid: *adjustment_type_id,
                     });
@@ -51,13 +51,13 @@ async fn main() {
 }
 
 /// Lists the available adjustments.
-fn list_adjustments(filter: AdjustmentQueryFilter) {
+fn list_adjustments(filter: &AdjustmentQueryFilter) {
     let results = db::get_adjustments(filter);
 
     // Output results as a table.
     let mut table = tabled::Table::new(results);
     table.with(Style::sharp());
-    println!("{}", table);
+    println!("{table}");
 }
 
 /// Adds an adjustment.
@@ -77,7 +77,7 @@ fn list_adjustment_types(limit: Option<u8>) {
     // Output results as a table.
     let mut table = tabled::Table::new(results);
     table.with(Style::sharp());
-    println!("{}", table);
+    println!("{table}");
 }
 
 #[derive(Parser)]

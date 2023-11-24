@@ -9,12 +9,12 @@ pub fn establish_connection() -> MysqlConnection {
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     MysqlConnection::establish(&database_url)
-        .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+        .unwrap_or_else(|_| panic!("Error connecting to {database_url}"))
 }
 
 /// Returns a single adjustment type.
 pub fn get_adjustment_type(atid: u64) -> Option<AdjustmentType> {
-    use crate::schema::adjustment_type::dsl::*;
+    use crate::schema::adjustment_type::dsl::adjustment_type;
 
     let connection = &mut establish_connection();
     adjustment_type
@@ -27,11 +27,11 @@ pub fn get_adjustment_type(atid: u64) -> Option<AdjustmentType> {
 
 /// Returns a list of adjustment types.
 pub fn get_adjustment_types(limit: Option<u8>) -> Vec<AdjustmentType> {
-    use crate::schema::adjustment_type::dsl::*;
+    use crate::schema::adjustment_type::dsl::adjustment_type;
 
     let connection = &mut establish_connection();
     adjustment_type
-        .limit(limit.unwrap_or(10) as i64)
+        .limit(i64::from(limit.unwrap_or(10)))
         .select(AdjustmentType::as_select())
         .load(connection)
         .expect("Error loading adjustment types")
@@ -59,23 +59,23 @@ pub fn delete_adjustment_type(id: u64) -> Result<usize, String> {
     let connection = &mut establish_connection();
 
     // Check if there are still adjustments referencing this adjustment type.
-    let adjustments = get_adjustments(AdjustmentQueryFilter {
+    let adjustments = get_adjustments(&AdjustmentQueryFilter {
         limit: None,
         atid: Some(id),
     });
-    if adjustments.len() > 0 {
-        return Err(format!("There are still adjustments referencing adjustment type {}", id));
+    if !adjustments.is_empty() {
+        return Err(format!("There are still adjustments referencing adjustment type {id}"));
     }
 
     let result = diesel::delete(crate::schema::adjustment_type::table.find(id))
         .execute(connection);
     match result {
         Ok(rows_deleted) => Ok(rows_deleted),
-        Err(e) => Err(format!("Error deleting adjustment type: {}", e)),
+        Err(e) => Err(format!("Error deleting adjustment type: {e}")),
     }
 }
 
-/// A filter for the get_adjustments function.
+/// A filter for the `get_adjustments()` function.
 #[derive(Deserialize)]
 pub struct AdjustmentQueryFilter {
     // The number of adjustments to return. Defaults to 10.
@@ -86,7 +86,7 @@ pub struct AdjustmentQueryFilter {
 }
 
 /// Returns a list of adjustments.
-pub fn get_adjustments(filter: AdjustmentQueryFilter) -> Vec<Adjustment> {
+pub fn get_adjustments(filter: &AdjustmentQueryFilter) -> Vec<Adjustment> {
     use crate::schema::adjustment::dsl;
 
     let connection = &mut establish_connection();
@@ -97,7 +97,7 @@ pub fn get_adjustments(filter: AdjustmentQueryFilter) -> Vec<Adjustment> {
         query = query.filter(dsl::adjustment_type_id.eq(at_id));
     }
     query
-        .limit(filter.limit.unwrap_or(10) as i64)
+        .limit(i64::from(filter.limit.unwrap_or(10)))
         .order(dsl::created.desc())
         .select(Adjustment::as_select())
         .load(connection)

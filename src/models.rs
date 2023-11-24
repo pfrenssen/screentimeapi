@@ -40,6 +40,6 @@ pub struct NewAdjustment<'a> {
 fn display_optional_string(o: &Option<String>) -> String {
     match o {
         Some(s) => s.clone(),
-        None => String::from(""),
+        None => String::new(),
     }
 }
