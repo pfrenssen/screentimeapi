@@ -35,3 +35,13 @@ GET http://{{hostname}}:{{port}}/adjustments
 ###
 # Lists available adjustments of type 1, limited to 10 results.
 GET http://{{hostname}}:{{port}}/adjustments?type=1&limit=10
+
+###
+# Creates a new adjustment.
+POST http://{{hostname}}:{{port}}/adjustments
+Content-Type: application/json
+
+{
+  "type": 1,
+  "description": "Mathematics"
+}

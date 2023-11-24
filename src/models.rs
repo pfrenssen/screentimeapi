@@ -30,11 +30,12 @@ pub struct Adjustment {
     pub comment: Option<String>,
 }
 
-#[derive(Insertable)]
+#[derive(Deserialize, Insertable)]
 #[diesel(table_name = crate::schema::adjustment)]
-pub struct NewAdjustment<'a> {
+pub struct NewAdjustment {
+    #[serde(rename(deserialize = "type"))]
     pub adjustment_type_id: u64,
-    pub comment: Option<&'a str>,
+    pub comment: Option<String>,
 }
 
 fn display_optional_string(o: &Option<String>) -> String {

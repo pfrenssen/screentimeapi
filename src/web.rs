@@ -11,7 +11,7 @@ use axum::{
 use axum::extract::{Path, Query};
 use dotenvy::dotenv;
 use crate::db;
-use crate::models::NewAdjustmentType;
+use crate::models::{NewAdjustment, NewAdjustmentType};
 
 pub async fn serve() {
     dotenv().ok();
@@ -35,6 +35,7 @@ fn get_app() -> Router {
         .route("/adjustment-types/:id", get(get_adjustment_type))
         .route("/adjustment-types/:id", delete(delete_adjustment_type))
         .route("/adjustments", get(list_adjustments))
+        .route("/adjustments", post(create_adjustment))
 }
 
 // Handler for the main API endpoint. Returns the version of the API as a JSON object.
@@ -101,4 +102,21 @@ async fn list_adjustments(Query(filter): Query<db::AdjustmentQueryFilter>) -> im
     let adjustments = db::get_adjustments(&filter);
     let response = Response::new(Body::from(serde_json::to_string(&adjustments).unwrap()));
     (StatusCode::OK, response)
+}
+
+// POST handler: creates a new adjustment.
+async fn create_adjustment(Json(payload): Json<NewAdjustment>) -> impl IntoResponse {
+    let adjustment_type = db::get_adjustment_type(payload.adjustment_type_id);
+    match adjustment_type {
+        Some(adjustment_type) => {
+            db::add_adjustment(&adjustment_type, &payload.comment);
+            let response = Response::new(Body::from(format!("{{\"inserted\": \"1\"}}")));
+            (StatusCode::CREATED, response)
+        }
+        // Return a 404 if the adjustment type does not exist.
+        None => {
+            let response = Response::new(Body::from(format!("{{\"error\": \"Adjustment type with ID {} not found\"}}", payload.adjustment_type_id)));
+            (StatusCode::NOT_FOUND, response)
+        }
+    }
 }

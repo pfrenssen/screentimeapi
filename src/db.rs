@@ -105,11 +105,11 @@ pub fn get_adjustments(filter: &AdjustmentQueryFilter) -> Vec<Adjustment> {
 }
 
 /// Adds a new adjustment.
-pub fn add_adjustment(adjustment_type: &AdjustmentType, comment: Option<&str>) -> usize {
+pub fn add_adjustment(adjustment_type: &AdjustmentType, comment: &Option<String>) -> usize {
     let connection = &mut establish_connection();
     let new_adjustment = crate::models::NewAdjustment {
         adjustment_type_id: adjustment_type.id,
-        comment,
+        comment: comment.clone(),
     };
 
     diesel::insert_into(crate::schema::adjustment::table)

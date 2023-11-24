@@ -40,7 +40,7 @@ async fn main() {
                     });
                 }
                 Some(AdjustmentCommands::Add { adjustment_type_id, comment }) => {
-                    add_adjustment(*adjustment_type_id, comment.as_deref());
+                    add_adjustment(*adjustment_type_id, comment);
                 }
                 None => {}
             }
@@ -61,13 +61,13 @@ fn list_adjustments(filter: &AdjustmentQueryFilter) {
 }
 
 /// Adds an adjustment.
-fn add_adjustment(adjustment_type_id: u64, comment: Option<&str>) {
+fn add_adjustment(adjustment_type_id: u64, comment: &Option<String>) {
     let adjustment_type = db::get_adjustment_types(None)
         .into_iter()
         .find(|at| at.id == adjustment_type_id)
         .expect("Adjustment type not found");
 
-    db::add_adjustment(&adjustment_type, comment);
+    db::add_adjustment(&adjustment_type, &comment);
 }
 
 /// Lists the available adjustment types.
