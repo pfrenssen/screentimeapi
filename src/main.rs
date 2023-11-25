@@ -1,5 +1,6 @@
 use crate::db::AdjustmentQueryFilter;
 use clap::{Parser, Subcommand};
+use diesel::MysqlConnection;
 use tabled::settings::Style;
 
 mod db;
@@ -11,21 +12,24 @@ mod web;
 async fn main() {
     let cli = Cli::parse();
 
+    let pool = db::get_connection_pool();
+    let connection = &mut pool.get().unwrap();
+
     // Todo: Return an exit code if the command failed.
     match &cli.command {
         None => {}
         Some(Commands::AdjustmentType { command }) => match command {
             Some(AdjustmentTypeCommands::List { limit }) => {
-                list_adjustment_types(*limit);
+                list_adjustment_types(connection, *limit);
             }
             Some(AdjustmentTypeCommands::Add {
                 description,
                 adjustment,
             }) => {
-                db::add_adjustment_type(description.clone(), *adjustment);
+                db::add_adjustment_type(connection, description.clone(), *adjustment);
             }
             Some(AdjustmentTypeCommands::Delete { id }) => {
-                let result = db::delete_adjustment_type(*id);
+                let result = db::delete_adjustment_type(connection, *id);
                 match result {
                     Ok(rows_deleted) => println!("Deleted {rows_deleted} adjustment type(s)"),
                     Err(e) => println!("Error: {e}"),
@@ -39,33 +43,36 @@ async fn main() {
                 adjustment_type_id,
                 since,
             }) => {
-                list_adjustments(&AdjustmentQueryFilter {
-                    limit: *limit,
-                    atid: *adjustment_type_id,
-                    since: since.map(|d| d.and_hms_opt(0, 0, 0).unwrap()),
-                });
+                list_adjustments(
+                    connection,
+                    &AdjustmentQueryFilter {
+                        limit: *limit,
+                        atid: *adjustment_type_id,
+                        since: since.map(|d| d.and_hms_opt(0, 0, 0).unwrap()),
+                    },
+                );
             }
             Some(AdjustmentCommands::Add {
                 adjustment_type_id,
                 comment,
             }) => {
-                add_adjustment(*adjustment_type_id, comment);
+                add_adjustment(connection, *adjustment_type_id, comment);
             }
             None => {}
         },
         Some(Commands::Serve) => web::serve().await,
         Some(Commands::Time) => {
-            print_adjusted_time();
+            print_adjusted_time(connection);
         }
         Some(Commands::TimeEntry { command }) => match command {
             Some(TimeEntryCommands::Current) => {
-                print_current_time_entry();
+                print_current_time_entry(connection);
             }
             Some(TimeEntryCommands::List { limit }) => {
-                list_time_entries(*limit);
+                list_time_entries(connection, *limit);
             }
             Some(TimeEntryCommands::Add { time }) => {
-                db::add_time_entry(*time);
+                db::add_time_entry(connection, *time);
             }
             None => {}
         },
@@ -73,8 +80,8 @@ async fn main() {
 }
 
 /// Lists the available adjustments.
-fn list_adjustments(filter: &AdjustmentQueryFilter) {
-    let results = db::get_adjustments(filter);
+fn list_adjustments(connection: &mut MysqlConnection, filter: &AdjustmentQueryFilter) {
+    let results = db::get_adjustments(connection, filter);
 
     // Output results as a table.
     let mut table = tabled::Table::new(results);
@@ -83,18 +90,22 @@ fn list_adjustments(filter: &AdjustmentQueryFilter) {
 }
 
 /// Adds an adjustment.
-fn add_adjustment(adjustment_type_id: u64, comment: &Option<String>) {
-    let adjustment_type = db::get_adjustment_types(None)
+fn add_adjustment(
+    connection: &mut MysqlConnection,
+    adjustment_type_id: u64,
+    comment: &Option<String>,
+) {
+    let adjustment_type = db::get_adjustment_types(connection, None)
         .into_iter()
         .find(|at| at.id == adjustment_type_id)
         .expect("Adjustment type not found");
 
-    db::add_adjustment(&adjustment_type, comment);
+    db::add_adjustment(connection, &adjustment_type, comment);
 }
 
 /// Lists the available adjustment types.
-fn list_adjustment_types(limit: Option<u8>) {
-    let results = db::get_adjustment_types(limit);
+fn list_adjustment_types(connection: &mut MysqlConnection, limit: Option<u8>) {
+    let results = db::get_adjustment_types(connection, limit);
 
     // Output results as a table.
     let mut table = tabled::Table::new(results);
@@ -106,22 +117,22 @@ fn list_adjustment_types(limit: Option<u8>) {
 ///
 /// This calculates the current time by taking the most recent time entry and adding all adjustments
 /// to it.
-fn print_adjusted_time() {
-    let adjusted_time = db::get_adjusted_time();
+fn print_adjusted_time(connection: &mut MysqlConnection) {
+    let adjusted_time = db::get_adjusted_time(connection);
     println!("{:01}:{:02}", adjusted_time / 60, adjusted_time % 60);
 }
 
 /// Prints the current time.
-fn print_current_time_entry() {
-    let time_entry = db::get_current_time_entry();
+fn print_current_time_entry(connection: &mut MysqlConnection) {
+    let time_entry = db::get_current_time_entry(connection);
     if let Some(time_entry) = time_entry {
         println!("{time_entry}");
     }
 }
 
 /// Lists the available time entries.
-fn list_time_entries(limit: Option<u8>) {
-    let results = db::get_time_entries(limit);
+fn list_time_entries(connection: &mut MysqlConnection, limit: Option<u8>) {
+    let results = db::get_time_entries(connection, limit);
 
     // Output results as a table.
     let mut table = tabled::Table::new(results);

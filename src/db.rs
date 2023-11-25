@@ -1,28 +1,31 @@
 use crate::models::{Adjustment, AdjustmentType};
 use chrono::NaiveDateTime;
+use diesel::r2d2::ConnectionManager;
 use diesel::{
-    Connection, ExpressionMethods, MysqlConnection, OptionalExtension, QueryDsl, RunQueryDsl,
-    SelectableHelper,
+    ExpressionMethods, MysqlConnection, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper,
 };
 use dotenvy::dotenv;
+use r2d2::Pool;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::default::Default;
 use std::env;
 
-pub fn establish_connection() -> MysqlConnection {
+pub fn get_connection_pool() -> Pool<ConnectionManager<MysqlConnection>> {
     dotenv().ok();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    MysqlConnection::establish(&database_url)
-        .unwrap_or_else(|_| panic!("Error connecting to {database_url}"))
+    let manager = ConnectionManager::<MysqlConnection>::new(database_url);
+    Pool::builder()
+        .test_on_check_out(true)
+        .build(manager)
+        .expect("Could not build connection pool")
 }
 
 /// Returns a single adjustment type.
-pub fn get_adjustment_type(atid: u64) -> Option<AdjustmentType> {
+pub fn get_adjustment_type(connection: &mut MysqlConnection, atid: u64) -> Option<AdjustmentType> {
     use crate::schema::adjustment_type::dsl::adjustment_type;
 
-    let connection = &mut establish_connection();
     adjustment_type
         .find(atid)
         .select(AdjustmentType::as_select())
@@ -32,10 +35,12 @@ pub fn get_adjustment_type(atid: u64) -> Option<AdjustmentType> {
 }
 
 /// Returns a list of adjustment types.
-pub fn get_adjustment_types(limit: Option<u8>) -> Vec<AdjustmentType> {
+pub fn get_adjustment_types(
+    connection: &mut MysqlConnection,
+    limit: Option<u8>,
+) -> Vec<AdjustmentType> {
     use crate::schema::adjustment_type::dsl::adjustment_type;
 
-    let connection = &mut establish_connection();
     adjustment_type
         .limit(i64::from(limit.unwrap_or(10)))
         .select(AdjustmentType::as_select())
@@ -45,8 +50,11 @@ pub fn get_adjustment_types(limit: Option<u8>) -> Vec<AdjustmentType> {
 
 /// Adds a new adjustment type.
 /// Returns the number of inserted rows.
-pub fn add_adjustment_type(description: String, adjustment: i8) -> usize {
-    let connection = &mut establish_connection();
+pub fn add_adjustment_type(
+    connection: &mut MysqlConnection,
+    description: String,
+    adjustment: i8,
+) -> usize {
     let new_adjustment_type = crate::models::NewAdjustmentType {
         description,
         adjustment,
@@ -61,15 +69,13 @@ pub fn add_adjustment_type(description: String, adjustment: i8) -> usize {
 /// Deletes the adjustment type with the given ID.
 /// If there are still adjustments referencing this adjustment type, the deletion will fail.
 /// Todo: return a proper error type.
-pub fn delete_adjustment_type(id: u64) -> Result<usize, String> {
-    let connection = &mut establish_connection();
-
+pub fn delete_adjustment_type(connection: &mut MysqlConnection, id: u64) -> Result<usize, String> {
     // Check if there are still adjustments referencing this adjustment type.
     let filter = AdjustmentQueryFilter {
         atid: Some(id),
         ..Default::default()
     };
-    let adjustments = get_adjustments(&filter);
+    let adjustments = get_adjustments(connection, &filter);
     if !adjustments.is_empty() {
         return Err(format!(
             "There are still adjustments referencing adjustment type {id}"
@@ -95,10 +101,12 @@ pub struct AdjustmentQueryFilter {
 }
 
 /// Returns a list of adjustments.
-pub fn get_adjustments(filter: &AdjustmentQueryFilter) -> Vec<Adjustment> {
+pub fn get_adjustments(
+    connection: &mut MysqlConnection,
+    filter: &AdjustmentQueryFilter,
+) -> Vec<Adjustment> {
     use crate::schema::adjustment::dsl;
 
-    let connection = &mut establish_connection();
     let mut query = dsl::adjustment.into_boxed();
 
     // Optionally filter by adjustment type ID.
@@ -120,8 +128,11 @@ pub fn get_adjustments(filter: &AdjustmentQueryFilter) -> Vec<Adjustment> {
 }
 
 /// Adds a new adjustment.
-pub fn add_adjustment(adjustment_type: &AdjustmentType, comment: &Option<String>) -> usize {
-    let connection = &mut establish_connection();
+pub fn add_adjustment(
+    connection: &mut MysqlConnection,
+    adjustment_type: &AdjustmentType,
+    comment: &Option<String>,
+) -> usize {
     let new_adjustment = crate::models::NewAdjustment {
         adjustment_type_id: adjustment_type.id,
         comment: comment.clone(),
@@ -134,10 +145,11 @@ pub fn add_adjustment(adjustment_type: &AdjustmentType, comment: &Option<String>
 }
 
 /// Returns the current time entry.
-pub fn get_current_time_entry() -> Option<crate::models::TimeEntry> {
+pub fn get_current_time_entry(
+    connection: &mut MysqlConnection,
+) -> Option<crate::models::TimeEntry> {
     use crate::schema::time_entry::dsl;
 
-    let connection = &mut establish_connection();
     dsl::time_entry
         .order(dsl::created.desc())
         .select(crate::models::TimeEntry::as_select())
@@ -147,10 +159,12 @@ pub fn get_current_time_entry() -> Option<crate::models::TimeEntry> {
 }
 
 /// Returns a list of time entries.
-pub fn get_time_entries(limit: Option<u8>) -> Vec<crate::models::TimeEntry> {
+pub fn get_time_entries(
+    connection: &mut MysqlConnection,
+    limit: Option<u8>,
+) -> Vec<crate::models::TimeEntry> {
     use crate::schema::time_entry::dsl;
 
-    let connection = &mut establish_connection();
     dsl::time_entry
         .limit(i64::from(limit.unwrap_or(10)))
         .order(dsl::created.desc())
@@ -160,8 +174,7 @@ pub fn get_time_entries(limit: Option<u8>) -> Vec<crate::models::TimeEntry> {
 }
 
 /// Adds a new time entry.
-pub fn add_time_entry(time: u16) -> usize {
-    let connection = &mut establish_connection();
+pub fn add_time_entry(connection: &mut MysqlConnection, time: u16) -> usize {
     let new_time_entry = crate::models::NewTimeEntry { time };
 
     diesel::insert_into(crate::schema::time_entry::table)
@@ -170,9 +183,9 @@ pub fn add_time_entry(time: u16) -> usize {
         .expect("Error inserting time entry")
 }
 
-pub fn get_adjusted_time() -> u16 {
+pub fn get_adjusted_time(connection: &mut MysqlConnection) -> u16 {
     // Get the most recent time entry.
-    let time_entry = get_current_time_entry();
+    let time_entry = get_current_time_entry(connection);
 
     // If there is no time entry, start calculating from 0.
     let mut adjusted_time: i32 = match &time_entry {
@@ -189,10 +202,10 @@ pub fn get_adjusted_time() -> u16 {
             ..Default::default()
         },
     };
-    let adjustments = get_adjustments(&filter);
+    let adjustments = get_adjustments(connection, &filter);
 
     // Retrieve the adjustment types for the given adjustments.
-    let adjustment_types = get_adjustment_types_for_adjustments(&adjustments);
+    let adjustment_types = get_adjustment_types_for_adjustments(connection, &adjustments);
 
     // Calculate the adjusted time.
     for adjustment in adjustments {
@@ -212,6 +225,7 @@ pub fn get_adjusted_time() -> u16 {
 
 /// Returns a map of adjustment types that correspond to the given adjustments.
 pub fn get_adjustment_types_for_adjustments(
+    connection: &mut MysqlConnection,
     adjustments: &[Adjustment],
 ) -> HashMap<u64, AdjustmentType> {
     // Get a list of unique adjustment type IDs from the given adjustments.
@@ -219,7 +233,6 @@ pub fn get_adjustment_types_for_adjustments(
         adjustments.iter().map(|a| a.adjustment_type_id).collect();
 
     // Fetch the adjustment types for the given adjustment type IDs.
-    let connection = &mut establish_connection();
     let adjustment_types = crate::schema::adjustment_type::table
         .filter(crate::schema::adjustment_type::dsl::id.eq_any(adjustment_type_ids))
         .select(AdjustmentType::as_select())
