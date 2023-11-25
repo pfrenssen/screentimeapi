@@ -55,6 +55,7 @@ fn get_app() -> Router {
         .route("/adjustment-types/:id", delete(delete_adjustment_type))
         .route("/adjustments", get(list_adjustments))
         .route("/adjustments", post(create_adjustment))
+        .route("/time", get(get_adjusted_time))
         .with_state(app_state)
 }
 
@@ -175,4 +176,16 @@ async fn create_adjustment(
         )));
         (StatusCode::NOT_FOUND, response)
     }
+}
+
+// GET handler: returns the current time, adjusted by the available adjustments.
+async fn get_adjusted_time(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = &state.db_pool;
+    let connection = &mut pool.get().unwrap();
+    let adjusted_time = db::get_adjusted_time(connection);
+    let formatted_time = format!("{:01}:{:02}", adjusted_time / 60, adjusted_time % 60);
+    let response = Response::new(Body::from(format!(
+        "{{\"time\":{adjusted_time},\"formatted_time\":\"{formatted_time}\"}}"
+    )));
+    (StatusCode::OK, response)
 }
