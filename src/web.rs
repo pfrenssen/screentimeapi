@@ -15,6 +15,7 @@ use dotenvy::dotenv;
 use r2d2::Pool;
 use std::env;
 use std::net::SocketAddr;
+use tokio::net::TcpListener;
 
 #[derive(Clone)]
 struct AppState {
@@ -35,11 +36,9 @@ pub async fn serve() {
         .parse()
         .expect("Unable to create a valid socket address.");
 
-    let app = async { get_app() };
-    axum::Server::bind(&socket_address)
-        .serve(app.await.into_make_service())
-        .await
-        .unwrap();
+    let app = get_app();
+    let listener = TcpListener::bind(&socket_address).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 // Returns the app routes.
