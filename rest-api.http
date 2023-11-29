@@ -53,3 +53,24 @@ Content-Type: application/json
 ###
 # Retrieves the current adjusted time.
 GET http://{{hostname}}:{{port}}/time
+
+###
+# Lists available time entries.
+GET http://{{hostname}}:{{port}}/time-entries
+
+###
+# Creates a new time entry.
+POST http://{{hostname}}:{{port}}/time-entries
+Content-Type: application/json
+
+{
+  "time": 120
+}
+
+###
+# Retrieves a single time entry.
+GET http://{{hostname}}:{{port}}/time-entries/1
+
+###
+# Deletes a time entry.
+DELETE http://{{hostname}}:{{port}}/time-entries/1

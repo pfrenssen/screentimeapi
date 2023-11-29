@@ -19,7 +19,7 @@ pub struct NewAdjustmentType {
     pub adjustment: i8,
 }
 
-#[derive(Associations, Queryable, Selectable, Serialize, Tabled)]
+#[derive(Associations, Debug, Queryable, Selectable, Serialize, Tabled)]
 #[diesel(table_name = crate::schema::adjustment)]
 #[diesel(check_for_backend(diesel::mysql::Mysql))]
 #[diesel(belongs_to(AdjustmentType))]
@@ -37,6 +37,7 @@ pub struct NewAdjustment {
     #[serde(rename(deserialize = "type"))]
     pub adjustment_type_id: u64,
     pub comment: Option<String>,
+    pub created: Option<chrono::NaiveDateTime>,
 }
 
 /// Represents a time entry in the database.
@@ -45,7 +46,7 @@ pub struct NewAdjustment {
 /// - `id` of type `u64`, which is the unique identifier of the time entry.
 /// - `time` of type `u16`, which represents the total number of minutes.
 /// - `created` of type `chrono::NaiveDateTime`, which is the timestamp when the time entry was created.
-#[derive(Queryable, Selectable, Tabled)]
+#[derive(Debug, Queryable, Selectable, Tabled)]
 #[diesel(table_name = crate::schema::time_entry)]
 #[diesel(check_for_backend(diesel::mysql::Mysql))]
 pub struct TimeEntry {
@@ -92,7 +93,7 @@ impl Serialize for TimeEntry {
         state.serialize_field("id", &self.id)?;
         state.serialize_field("time", &self.time)?;
         state.serialize_field("created", &self.created)?;
-        state.serialize_field("time_string", &self.get_formatted_time())?;
+        state.serialize_field("time_formatted", &self.get_formatted_time())?;
         state.end()
     }
 }
@@ -109,6 +110,7 @@ impl fmt::Display for TimeEntry {
 #[diesel(table_name = crate::schema::time_entry)]
 pub struct NewTimeEntry {
     pub time: u16,
+    pub created: Option<chrono::NaiveDateTime>,
 }
 
 fn display_optional_string(o: &Option<String>) -> String {

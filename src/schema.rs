@@ -27,4 +27,4 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(adjustment, adjustment_type,);
+diesel::allow_tables_to_appear_in_same_query!(adjustment, adjustment_type, time_entry,);

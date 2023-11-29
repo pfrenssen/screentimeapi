@@ -132,10 +132,12 @@ pub fn add_adjustment(
     connection: &mut MysqlConnection,
     adjustment_type: &AdjustmentType,
     comment: &Option<String>,
+    created: &Option<NaiveDateTime>,
 ) -> usize {
     let new_adjustment = crate::models::NewAdjustment {
         adjustment_type_id: adjustment_type.id,
         comment: comment.clone(),
+        created: *created,
     };
 
     diesel::insert_into(crate::schema::adjustment::table)
@@ -174,13 +176,39 @@ pub fn get_time_entries(
 }
 
 /// Adds a new time entry.
-pub fn add_time_entry(connection: &mut MysqlConnection, time: u16) -> usize {
-    let new_time_entry = crate::models::NewTimeEntry { time };
+pub fn add_time_entry(
+    connection: &mut MysqlConnection,
+    time: u16,
+    created: Option<NaiveDateTime>,
+) -> usize {
+    let new_time_entry = crate::models::NewTimeEntry { time, created };
 
     diesel::insert_into(crate::schema::time_entry::table)
         .values(&new_time_entry)
         .execute(connection)
         .expect("Error inserting time entry")
+}
+
+/// Returns the time entry with the given ID.
+pub fn get_time_entry(
+    connection: &mut MysqlConnection,
+    id: u64,
+) -> Option<crate::models::TimeEntry> {
+    use crate::schema::time_entry::dsl;
+
+    dsl::time_entry
+        .find(id)
+        .select(crate::models::TimeEntry::as_select())
+        .first(connection)
+        .optional()
+        .expect("Error loading time entry")
+}
+
+/// Deletes the time entry with the given ID.
+pub fn delete_time_entry(connection: &mut MysqlConnection, id: u64) -> usize {
+    diesel::delete(crate::schema::time_entry::table.find(id))
+        .execute(connection)
+        .expect("Error deleting time entry")
 }
 
 pub fn get_adjusted_time(connection: &mut MysqlConnection) -> u16 {
@@ -202,7 +230,10 @@ pub fn get_adjusted_time(connection: &mut MysqlConnection) -> u16 {
             ..Default::default()
         },
     };
-    let adjustments = get_adjustments(connection, &filter);
+    let mut adjustments = get_adjustments(connection, &filter);
+
+    // Sort the adjustments by creation date, ascending.
+    adjustments.sort_by(|a, b| a.created.cmp(&b.created));
 
     // Retrieve the adjustment types for the given adjustments.
     let adjustment_types = get_adjustment_types_for_adjustments(connection, &adjustments);
@@ -213,14 +244,13 @@ pub fn get_adjusted_time(connection: &mut MysqlConnection) -> u16 {
             .get(&adjustment.adjustment_type_id)
             .unwrap();
         adjusted_time += i32::from(adjustment_type.adjustment);
+        // We can't go below 0 since screen time can't be negative.
+        if adjusted_time < 0 {
+            adjusted_time = 0;
+        }
     }
 
-    // Convert the adjusted time to a u16. If it is lower than 0, return 0.
-    if adjusted_time < 0 {
-        0
-    } else {
-        u16::try_from(adjusted_time).unwrap()
-    }
+    u16::try_from(adjusted_time).unwrap()
 }
 
 /// Returns a map of adjustment types that correspond to the given adjustments.
@@ -241,4 +271,465 @@ pub fn get_adjustment_types_for_adjustments(
 
     // Create a map of adjustment type IDs to adjustment types.
     adjustment_types.into_iter().map(|at| (at.id, at)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use diesel::r2d2::ConnectionManager;
+    use diesel::result::Error;
+    use diesel::{Connection, MysqlConnection};
+    use r2d2::Pool;
+
+    fn setup() -> Pool<ConnectionManager<MysqlConnection>> {
+        dotenv().ok();
+        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let manager = ConnectionManager::<MysqlConnection>::new(database_url);
+        Pool::builder()
+            .test_on_check_out(true)
+            .build(manager)
+            .expect("Could not build connection pool")
+    }
+
+    #[test]
+    fn test_get_adjustment_type() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Initially there are no adjustment types. None is returned.
+            let adjustment_type = get_adjustment_type(conn, 1);
+            assert!(adjustment_type.is_none());
+
+            // Create an adjustment type.
+            let result = add_adjustment_type(conn, "Test".to_string(), 1);
+
+            // 1 record should have been inserted.
+            assert_eq!(result, 1);
+
+            // Retrieve the ID of the inserted adjustment type.
+            let adjustment_type_id = crate::schema::adjustment_type::table
+                .select(crate::schema::adjustment_type::dsl::id)
+                .first::<u64>(conn)
+                .unwrap();
+
+            // Retrieve the adjustment type and check that it has the correct description and
+            // adjustment.
+            let adjustment_type = get_adjustment_type(conn, adjustment_type_id).unwrap();
+            assert_eq!(adjustment_type.description, "Test");
+            assert_eq!(adjustment_type.adjustment, 1);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_get_adjustment_types() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Initially there are no adjustment types. An empty vector is returned.
+            let adjustment_types = get_adjustment_types(conn, None);
+            assert!(adjustment_types.is_empty());
+
+            // Create 12 adjustment types.
+            for i in 0..=11 {
+                add_adjustment_type(conn, format!("Test {}", i), i - 6);
+            }
+            // Retrieve adjustment types without passing a limit. We should get 10 adjustment types
+            // by default.
+            let adjustment_types = get_adjustment_types(conn, None);
+            assert_eq!(adjustment_types.len(), 10);
+
+            // Pass a limit of 5. We should get 5 adjustment types.
+            let adjustment_types = get_adjustment_types(conn, Some(5));
+            assert_eq!(adjustment_types.len(), 5);
+
+            // Pass a limit of 100. We should get 12 adjustment types.
+            let adjustment_types = get_adjustment_types(conn, Some(100));
+            for (i, adjustment_type) in adjustment_types.iter().enumerate() {
+                // Check that all adjustment types have the correct description and adjustment.
+                assert_eq!(adjustment_type.description, format!("Test {}", i));
+                assert_eq!(adjustment_type.adjustment, i as i8 - 6);
+            }
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_add_and_delete_adjustment_type() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Initially there are no adjustment types.
+            let adjustment_types = get_adjustment_types(conn, None);
+            assert!(adjustment_types.is_empty());
+
+            // Try to delete a non-existing adjustment type. This should return 0 deleted rows.
+            let rows_deleted = delete_adjustment_type(conn, 1);
+            assert_eq!(rows_deleted, Ok(0));
+
+            // Create an adjustment type.
+            let rows_inserted = add_adjustment_type(conn, "Test".to_string(), 1);
+            assert_eq!(rows_inserted, 1);
+
+            // Now there should be 1 adjustment type.
+            let adjustment_types = get_adjustment_types(conn, None);
+            assert_eq!(adjustment_types.len(), 1);
+
+            // Retrieve the created adjustment type so we know its ID and can delete it.
+            let adjustment_types = get_adjustment_types(conn, Some(10));
+            let last_adjustment_type = adjustment_types.last().unwrap();
+            let rows_deleted = delete_adjustment_type(conn, last_adjustment_type.id);
+
+            // 1 record should have been deleted.
+            assert_eq!(rows_deleted, Ok(1));
+
+            // Now there should be no adjustment types left.
+            let adjustment_types = get_adjustment_types(conn, None);
+            assert!(adjustment_types.is_empty());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn fails_to_delete_adjustment_type_with_adjustments() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Create an adjustment type.
+            add_adjustment_type(conn, "Test".to_string(), 1);
+
+            // Retrieve the created adjustment type so we know its ID.
+            let adjustment_types = get_adjustment_types(conn, Some(10));
+            let adjustment_type = adjustment_types.last().unwrap();
+
+            // Create an adjustment that references the adjustment type.
+            add_adjustment(conn, &adjustment_type, &Some("Test".to_string()), &None);
+
+            // When we now try to delete the adjustment type, we should get an error since it would
+            // leave the adjustment without an adjustment type.
+            let result = delete_adjustment_type(conn, adjustment_type.id);
+            assert!(result.is_err());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_get_adjustments() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Create 3 adjustment types.
+            for i in 0..=2 {
+                add_adjustment_type(conn, format!("Test {}", i), i - 1);
+            }
+
+            // Retrieve the adjustment types so we know their IDs.
+            let adjustment_types = get_adjustment_types(conn, None);
+
+            // Create 12 adjustments which reference the adjustment types and have different
+            // creation dates.
+            for i in 0..=11 {
+                let created = chrono::NaiveDate::from_ymd_opt(2023, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .checked_add_signed(chrono::Duration::days(i as i64))
+                    .unwrap();
+                add_adjustment(
+                    conn,
+                    &adjustment_types[i % 3],
+                    &Some(format!("Test {}", i)),
+                    &Some(created),
+                );
+            }
+
+            // Retrieve adjustments without any filters. We should get 10 adjustments by default.
+            let adjustments = get_adjustments(conn, &AdjustmentQueryFilter::default());
+            assert_eq!(adjustments.len(), 10);
+
+            // Retrieve adjustments with a limit of 5. We should get 5 adjustments.
+            let adjustments = get_adjustments(
+                conn,
+                &AdjustmentQueryFilter {
+                    limit: Some(5),
+                    ..Default::default()
+                },
+            );
+            assert_eq!(adjustments.len(), 5);
+
+            // Filter by one of the adjustment types. We should get 4 adjustments.
+            let adjustments = get_adjustments(
+                conn,
+                &AdjustmentQueryFilter {
+                    atid: Some(adjustment_types[0].id),
+                    ..Default::default()
+                },
+            );
+            assert_eq!(adjustments.len(), 4);
+            // Check that all adjustments have the correct adjustment type ID.
+            for adjustment in adjustments {
+                assert_eq!(adjustment.adjustment_type_id, adjustment_types[0].id);
+            }
+
+            // Filter by one of the adjustment types and a limit of 2. We should get 2 adjustments.
+            let adjustments = get_adjustments(
+                conn,
+                &AdjustmentQueryFilter {
+                    atid: Some(adjustment_types[1].id),
+                    limit: Some(2),
+                    ..Default::default()
+                },
+            );
+            assert_eq!(adjustments.len(), 2);
+            // Check that all adjustments have the correct adjustment type ID.
+            for adjustment in adjustments {
+                assert_eq!(adjustment.adjustment_type_id, adjustment_types[1].id);
+            }
+
+            // Filter by creation date. We should get 7 adjustments.
+            let adjustments = get_adjustments(
+                conn,
+                &AdjustmentQueryFilter {
+                    since: Some(
+                        chrono::NaiveDate::from_ymd_opt(2023, 1, 6)
+                            .unwrap()
+                            .and_hms_opt(0, 0, 0)
+                            .unwrap(),
+                    ),
+                    ..Default::default()
+                },
+            );
+            assert_eq!(adjustments.len(), 7);
+            // Check that all adjustments have a creation date after 6 january 2023.
+            for adjustment in adjustments {
+                assert!(
+                    adjustment.created
+                        >= chrono::NaiveDate::from_ymd_opt(2023, 1, 6)
+                            .unwrap()
+                            .and_hms_opt(0, 0, 0)
+                            .unwrap()
+                );
+            }
+
+            // Filter by creation date and adjustment type. We should get 3 adjustments.
+            let adjustments = get_adjustments(
+                conn,
+                &AdjustmentQueryFilter {
+                    atid: Some(adjustment_types[2].id),
+                    since: Some(
+                        chrono::NaiveDate::from_ymd_opt(2023, 1, 6)
+                            .unwrap()
+                            .and_hms_opt(0, 0, 0)
+                            .unwrap(),
+                    ),
+                    ..Default::default()
+                },
+            );
+            assert_eq!(adjustments.len(), 3);
+            // Check that all adjustments have a creation date after 6 january 2023.
+            for adjustment in &adjustments {
+                assert!(
+                    adjustment.created
+                        >= chrono::NaiveDate::from_ymd_opt(2023, 1, 6)
+                            .unwrap()
+                            .and_hms_opt(0, 0, 0)
+                            .unwrap()
+                );
+            }
+            // Check that all adjustments have the correct adjustment type ID.
+            for adjustment in adjustments {
+                assert_eq!(adjustment.adjustment_type_id, adjustment_types[2].id);
+            }
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_get_time_entries() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Initially there are no time entries. An empty vector is returned.
+            let time_entries = get_time_entries(conn, None);
+            assert!(time_entries.is_empty());
+
+            // Create 12 time entries at different points in time.
+            for i in 0..=11 {
+                // Generate a timestamp, i days after 1 january 2023.
+                let created = chrono::NaiveDate::from_ymd_opt(2023, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .checked_add_signed(chrono::Duration::days(i as i64))
+                    .unwrap();
+                add_time_entry(conn, i as u16 * 15, Some(created));
+            }
+            // Retrieve time entries without passing a limit. We should get 10 time entries.
+            let time_entries = get_time_entries(conn, None);
+            assert_eq!(time_entries.len(), 10);
+
+            // Pass a limit of 200. We should get all 12 time entries.
+            let time_entries = get_time_entries(conn, Some(200));
+            assert_eq!(time_entries.len(), 12);
+
+            // Check that all time entries have the correct time.
+            for (i, time_entry) in time_entries.iter().enumerate() {
+                assert_eq!(time_entry.time, (11 - i) as u16 * 15);
+            }
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_get_time_entry() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Initially there are no time entries. None is returned.
+            let time_entry = get_time_entry(conn, 1);
+            assert!(time_entry.is_none());
+
+            // Create a time entry.
+            let rows_inserted = add_time_entry(
+                conn,
+                120,
+                Some(
+                    NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")
+                        .unwrap(),
+                ),
+            );
+            assert_eq!(rows_inserted, 1);
+
+            // Now there should be 1 time entry.
+            let time_entries = get_time_entries(conn, None);
+            assert_eq!(time_entries.len(), 1);
+
+            // Get the ID of the created time entry.
+            let time_entry_id = time_entries.first().unwrap().id;
+
+            // Retrieve the time entry and check that it has the correct time and creation date.
+            let time_entry = get_time_entry(conn, time_entry_id).unwrap();
+            assert_eq!(time_entry.time, 120);
+            assert_eq!(
+                time_entry.created,
+                NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap()
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_add_and_delete_time_entry() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Initially there are no time entries.
+            let time_entries = get_time_entries(conn, None);
+            assert!(time_entries.is_empty());
+
+            // Add a time entry.
+            let rows_inserted = add_time_entry(
+                conn,
+                120,
+                Some(
+                    NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")
+                        .unwrap(),
+                ),
+            );
+            assert_eq!(rows_inserted, 1);
+
+            // Now there should be 1 time entry.
+            let time_entries = get_time_entries(conn, None);
+            assert_eq!(time_entries.len(), 1);
+
+            // Check that the time entry has the correct time and creation date.
+            let time_entry = time_entries.last().unwrap();
+            assert_eq!(time_entry.time, 120);
+            assert_eq!(
+                time_entry.created,
+                NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap()
+            );
+
+            // Delete the time entry.
+            delete_time_entry(conn, time_entry.id);
+
+            // Now there should be no time entries left.
+            let time_entries = get_time_entries(conn, None);
+            assert!(time_entries.is_empty());
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_get_adjusted_time() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Initially there are no time entries nor adjustments. The adjusted time should be 0.
+            let adjusted_time = get_adjusted_time(conn);
+            assert_eq!(adjusted_time, 0);
+
+            // Create 2 adjustment types. One with a positive adjustment and one with a negative
+            // adjustment.
+            add_adjustment_type(conn, "Cleaned room".to_string(), 2);
+            add_adjustment_type(conn, "Late in bed".to_string(), -1);
+
+            // Retrieve the adjustment types so we know their IDs.
+            let adjustment_types = get_adjustment_types(conn, None);
+            let positive_adjustment_type = adjustment_types.first().unwrap();
+            let negative_adjustment_type = adjustment_types.last().unwrap();
+
+            // Create a negative adjustment. This should not affect the adjusted time since we
+            // can't go below 0.
+            // For every adjustment created we increase the created date by 1 second so we can
+            // check that subsequent time entries override previous adjustments.
+            let mut created =
+                NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
+            add_adjustment(conn, negative_adjustment_type, &None, &Some(created));
+            let adjusted_time = get_adjusted_time(conn);
+            assert_eq!(adjusted_time, 0);
+
+            // Create an anonymous function to increase the created date by 1 second, by reference.
+            let add_1_second = |created: &mut NaiveDateTime| {
+                *created = created
+                    .checked_add_signed(chrono::Duration::seconds(1))
+                    .unwrap();
+            };
+
+            // Create a positive adjustment. This should increase the adjusted time.
+            add_1_second(&mut created);
+            add_adjustment(conn, positive_adjustment_type, &None, &Some(created));
+            let adjusted_time = get_adjusted_time(conn);
+            assert_eq!(adjusted_time, 2);
+
+            // Create a few more positive and negative adjustments.
+            add_1_second(&mut created);
+            add_adjustment(conn, positive_adjustment_type, &None, &Some(created));
+            add_1_second(&mut created);
+            add_adjustment(conn, negative_adjustment_type, &None, &Some(created));
+            add_1_second(&mut created);
+            add_adjustment(conn, positive_adjustment_type, &None, &Some(created));
+            let adjusted_time = get_adjusted_time(conn);
+            assert_eq!(adjusted_time, 5);
+
+            // Create a time entry. This should override all previous adjustments.
+            add_1_second(&mut created);
+            add_time_entry(conn, 120, Some(created));
+            let adjusted_time = get_adjusted_time(conn);
+            assert_eq!(adjusted_time, 120);
+
+            // Do a few more adjustments.
+            add_1_second(&mut created);
+            add_adjustment(conn, negative_adjustment_type, &None, &Some(created));
+            assert_eq!(get_adjusted_time(conn), 119);
+
+            add_1_second(&mut created);
+            add_adjustment(conn, positive_adjustment_type, &None, &Some(created));
+            assert_eq!(get_adjusted_time(conn), 121);
+
+            Ok(())
+        });
+    }
 }

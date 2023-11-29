@@ -65,6 +65,7 @@ async fn main() {
             print_adjusted_time(connection);
         }
         Some(Commands::TimeEntry { command }) => match command {
+            None => {}
             Some(TimeEntryCommands::Current) => {
                 print_current_time_entry(connection);
             }
@@ -72,9 +73,11 @@ async fn main() {
                 list_time_entries(connection, *limit);
             }
             Some(TimeEntryCommands::Add { time }) => {
-                db::add_time_entry(connection, *time);
+                db::add_time_entry(connection, *time, None);
             }
-            None => {}
+            Some(TimeEntryCommands::Delete { id }) => {
+                db::delete_time_entry(connection, *id);
+            }
         },
     }
 }
@@ -100,7 +103,7 @@ fn add_adjustment(
         .find(|at| at.id == adjustment_type_id)
         .expect("Adjustment type not found");
 
-    db::add_adjustment(connection, &adjustment_type, comment);
+    db::add_adjustment(connection, &adjustment_type, comment, &None);
 }
 
 /// Lists the available adjustment types.
@@ -243,5 +246,10 @@ enum TimeEntryCommands {
         /// The time of the time entry.
         #[arg(short, long)]
         time: u16,
+    },
+    /// Deletes the time entry with the given ID.
+    Delete {
+        /// The ID of the time entry to delete.
+        id: u64,
     },
 }
