@@ -163,7 +163,8 @@ async fn create_adjustment(
     let connection = &mut pool.get().unwrap();
     let adjustment_type = db::get_adjustment_type(connection, payload.adjustment_type_id);
     if let Some(adjustment_type) = adjustment_type {
-        let rows_inserted = db::add_adjustment(connection, &adjustment_type, &payload.comment);
+        let rows_inserted =
+            db::add_adjustment(connection, &adjustment_type, &payload.comment, &None);
         // Respond with the number of inserted rows.
         let response = Response::new(Body::from(format!("{{\"inserted\": \"{rows_inserted}\"}}")));
         (StatusCode::CREATED, response)

@@ -51,3 +51,14 @@ $ screentimeapi serve
 ```
 
 See [rest-api.http](rest-api.http) for examples.
+
+
+### Running tests
+
+1. Create an empty test database with corresponding user.
+1. Override the database URL with the test database while populating the tables
+   and running tests:
+    ```
+    $ DATABASE_URL=mysql://screentimeapi:screentimeapi@localhost/screentimeapitest diesel migration run
+    $ DATABASE_URL=mysql://screentimeapi:screentimeapi@localhost/screentimeapitest cargo test
+    ```
