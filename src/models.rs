@@ -93,7 +93,7 @@ impl Serialize for TimeEntry {
         state.serialize_field("id", &self.id)?;
         state.serialize_field("time", &self.time)?;
         state.serialize_field("created", &self.created)?;
-        state.serialize_field("time_string", &self.get_formatted_time())?;
+        state.serialize_field("time_formatted", &self.get_formatted_time())?;
         state.end()
     }
 }

@@ -1,5 +1,5 @@
 use crate::db;
-use crate::models::{NewAdjustment, NewAdjustmentType};
+use crate::models::{NewAdjustment, NewAdjustmentType, NewTimeEntry};
 use axum::extract::{Path, Query, State};
 use axum::{
     body::Body,
@@ -55,6 +55,10 @@ fn get_app() -> Router {
         .route("/adjustments", get(list_adjustments))
         .route("/adjustments", post(create_adjustment))
         .route("/time", get(get_adjusted_time))
+        .route("/time-entries", get(list_time_entries))
+        .route("/time-entries", post(create_time_entry))
+        .route("/time-entries/:id", get(get_time_entry))
+        .route("/time-entries/:id", delete(delete_time_entry))
         .with_state(app_state)
 }
 
@@ -187,5 +191,65 @@ async fn get_adjusted_time(State(state): State<AppState>) -> impl IntoResponse {
     let response = Response::new(Body::from(format!(
         "{{\"time\":{adjusted_time},\"formatted_time\":\"{formatted_time}\"}}"
     )));
+    (StatusCode::OK, response)
+}
+
+// GET handler: lists the available time entries.
+async fn list_time_entries(State(state): State<AppState>) -> impl IntoResponse {
+    let pool = &state.db_pool;
+    let connection = &mut pool.get().unwrap();
+    let time_entries = db::get_time_entries(connection, None);
+    let response = Response::new(Body::from(serde_json::to_string(&time_entries).unwrap()));
+    (StatusCode::OK, response)
+}
+
+// POST handler: creates a new time entry.
+async fn create_time_entry(
+    State(state): State<AppState>,
+    Json(payload): Json<NewTimeEntry>,
+) -> impl IntoResponse {
+    let pool = &state.db_pool;
+    let connection = &mut pool.get().unwrap();
+    let rows_inserted = db::add_time_entry(connection, payload.time, payload.created);
+    // Respond with the number of inserted rows.
+    let response = Response::new(Body::from(format!("{{\"inserted\": \"{rows_inserted}\"}}")));
+    (StatusCode::CREATED, response)
+}
+
+// GET handler: shows the time entry with the given ID.
+async fn get_time_entry(State(state): State<AppState>, Path(id): Path<u64>) -> impl IntoResponse {
+    let pool = &state.db_pool;
+    let connection = &mut pool.get().unwrap();
+    let time_entry = db::get_time_entry(connection, id);
+
+    if let Some(time_entry) = time_entry {
+        let response = Response::new(Body::from(serde_json::to_string(&time_entry).unwrap()));
+        (StatusCode::OK, response)
+    } else {
+        let response = Response::new(Body::from(format!(
+            "{{\"error\": \"Time entry with ID {id} not found\"}}"
+        )));
+        (StatusCode::NOT_FOUND, response)
+    }
+}
+
+/// DELETE handler: deletes the time entry with the given ID.
+async fn delete_time_entry(
+    State(state): State<AppState>,
+    Path(id): Path<u64>,
+) -> impl IntoResponse {
+    let pool = &state.db_pool;
+    let connection = &mut pool.get().unwrap();
+    // Return a 404 if the time entry does not exist.
+    let time_entry = db::get_time_entry(connection, id);
+    if time_entry.is_none() {
+        let response = Response::new(Body::from(format!(
+            "{{\"error\": \"Time entry with ID {id} not found\"}}"
+        )));
+        return (StatusCode::NOT_FOUND, response);
+    }
+
+    let rows_deleted = db::delete_time_entry(connection, id);
+    let response = Response::new(Body::from(format!("{{\"deleted\": \"{rows_deleted}\"}}")));
     (StatusCode::OK, response)
 }

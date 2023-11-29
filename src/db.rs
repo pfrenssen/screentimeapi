@@ -189,6 +189,21 @@ pub fn add_time_entry(
         .expect("Error inserting time entry")
 }
 
+/// Returns the time entry with the given ID.
+pub fn get_time_entry(
+    connection: &mut MysqlConnection,
+    id: u64,
+) -> Option<crate::models::TimeEntry> {
+    use crate::schema::time_entry::dsl;
+
+    dsl::time_entry
+        .find(id)
+        .select(crate::models::TimeEntry::as_select())
+        .first(connection)
+        .optional()
+        .expect("Error loading time entry")
+}
+
 /// Deletes the time entry with the given ID.
 pub fn delete_time_entry(connection: &mut MysqlConnection, id: u64) -> usize {
     diesel::delete(crate::schema::time_entry::table.find(id))
@@ -567,6 +582,44 @@ mod tests {
     }
 
     #[test]
+    fn test_get_time_entry() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Initially there are no time entries. None is returned.
+            let time_entry = get_time_entry(conn, 1);
+            assert!(time_entry.is_none());
+
+            // Create a time entry.
+            let rows_inserted = add_time_entry(
+                conn,
+                120,
+                Some(
+                    NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")
+                        .unwrap(),
+                ),
+            );
+            assert_eq!(rows_inserted, 1);
+
+            // Now there should be 1 time entry.
+            let time_entries = get_time_entries(conn, None);
+            assert_eq!(time_entries.len(), 1);
+
+            // Get the ID of the created time entry.
+            let time_entry_id = time_entries.first().unwrap().id;
+
+            // Retrieve the time entry and check that it has the correct time and creation date.
+            let time_entry = get_time_entry(conn, time_entry_id).unwrap();
+            assert_eq!(time_entry.time, 120);
+            assert_eq!(
+                time_entry.created,
+                NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap()
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
     fn test_add_and_delete_time_entry() {
         let pool = setup();
         let mut conn = pool.get().unwrap();
@@ -580,11 +633,8 @@ mod tests {
                 conn,
                 120,
                 Some(
-                    chrono::NaiveDateTime::parse_from_str(
-                        "2023-01-01 00:00:00",
-                        "%Y-%m-%d %H:%M:%S",
-                    )
-                    .unwrap(),
+                    NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")
+                        .unwrap(),
                 ),
             );
             assert_eq!(rows_inserted, 1);
@@ -598,8 +648,7 @@ mod tests {
             assert_eq!(time_entry.time, 120);
             assert_eq!(
                 time_entry.created,
-                chrono::NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")
-                    .unwrap()
+                NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap()
             );
 
             // Delete the time entry.
@@ -637,8 +686,7 @@ mod tests {
             // For every adjustment created we increase the created date by 1 second so we can
             // check that subsequent time entries override previous adjustments.
             let mut created =
-                chrono::NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")
-                    .unwrap();
+                NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
             add_adjustment(conn, negative_adjustment_type, &None, &Some(created));
             let adjusted_time = get_adjusted_time(conn);
             assert_eq!(adjusted_time, 0);
