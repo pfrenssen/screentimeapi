@@ -43,15 +43,59 @@ Usage
 $ screentimeapi --help
 ```
 
-### REST API
+### Web server
 
-Start the server.
+See [rest-api.http](rest-api.http) for examples of how to use the API.'
+
+#### Run manually
 ```
 $ screentimeapi serve
 ```
 
-See [rest-api.http](rest-api.http) for examples.
+#### Run as a systemd service
 
+Here is an example service file that you can adapt to your needs. It can be
+placed in `~/.config/systemd/user/screentimeapi.service`:
+
+```
+[Unit]
+Description=Screentime API
+After=network.target
+
+[Service]
+Environment="DATABASE_URL=mysql://user:pass@localhost/screentimeapi"
+Environment="SERVER_PORT=3000"
+Environment="SERVER_ADDRESS=0.0.0.0"
+ExecStart=/home/myuser/.local/bin/screentimeapi serve
+Restart=always
+RestartSec=5s
+StartLimitBurst=5
+
+[Install]
+WantedBy=default.target
+```
+
+Once you've created this file, you can start the service with the following
+command:
+
+```
+$ systemctl --user enable screentimeapi
+```
+
+To enable the service to start automatically at boot:
+
+```
+$ systemctl --user start screentimeapi
+```
+To check the status of your service:
+
+```
+$ systemctl --user status screentimeapi
+```
+
+
+Development
+-----------
 
 ### Running tests
 
