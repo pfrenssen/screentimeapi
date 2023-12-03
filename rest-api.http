@@ -51,6 +51,14 @@ Content-Type: application/json
 }
 
 ###
+# Retrieves a single adjustment.
+GET http://{{hostname}}:{{port}}/adjustments/1
+
+###
+# Deletes the adjustment with id 1.
+DELETE http://{{hostname}}:{{port}}/adjustments/1
+
+###
 # Retrieves the current adjusted time.
 GET http://{{hostname}}:{{port}}/time
 

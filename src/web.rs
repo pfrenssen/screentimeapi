@@ -54,6 +54,8 @@ fn get_app() -> Router {
         .route("/adjustment-types/:id", delete(delete_adjustment_type))
         .route("/adjustments", get(list_adjustments))
         .route("/adjustments", post(create_adjustment))
+        .route("/adjustments/:id", get(get_adjustment))
+        .route("/adjustments/:id", delete(delete_adjustment))
         .route("/time", get(get_adjusted_time))
         .route("/time-entries", get(list_time_entries))
         .route("/time-entries", post(create_time_entry))
@@ -180,6 +182,44 @@ async fn create_adjustment(
         )));
         (StatusCode::NOT_FOUND, response)
     }
+}
+
+// GET handler: shows the adjustment with the given ID.
+async fn get_adjustment(State(state): State<AppState>, Path(id): Path<u64>) -> impl IntoResponse {
+    let pool = &state.db_pool;
+    let connection = &mut pool.get().unwrap();
+    let adjustment = db::get_adjustment(connection, id);
+
+    if let Some(adjustment) = adjustment {
+        let response = Response::new(Body::from(serde_json::to_string(&adjustment).unwrap()));
+        (StatusCode::OK, response)
+    } else {
+        let response = Response::new(Body::from(format!(
+            "{{\"error\": \"Adjustment with ID {id} not found\"}}"
+        )));
+        (StatusCode::NOT_FOUND, response)
+    }
+}
+
+/// DELETE handler: deletes the adjustment with the given ID.
+async fn delete_adjustment(
+    State(state): State<AppState>,
+    Path(id): Path<u64>,
+) -> impl IntoResponse {
+    let pool = &state.db_pool;
+    let connection = &mut pool.get().unwrap();
+    // Return a 404 if the adjustment does not exist.
+    let adjustment = db::get_adjustment(connection, id);
+    if adjustment.is_none() {
+        let response = Response::new(Body::from(format!(
+            "{{\"error\": \"Adjustment with ID {id} not found\"}}"
+        )));
+        return (StatusCode::NOT_FOUND, response);
+    }
+
+    let rows_deleted = db::delete_adjustment(connection, id);
+    let response = Response::new(Body::from(format!("{{\"deleted\": \"{rows_deleted}\"}}")));
+    (StatusCode::OK, response)
 }
 
 // GET handler: returns the current time, adjusted by the available adjustments.

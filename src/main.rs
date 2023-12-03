@@ -38,6 +38,7 @@ async fn main() {
             None => {}
         },
         Some(Commands::Adjustment { command }) => match command {
+            None => {}
             Some(AdjustmentCommands::List {
                 limit,
                 adjustment_type_id,
@@ -58,7 +59,9 @@ async fn main() {
             }) => {
                 add_adjustment(connection, *adjustment_type_id, comment);
             }
-            None => {}
+            Some(AdjustmentCommands::Delete { id }) => {
+                db::delete_adjustment(connection, *id);
+            }
         },
         Some(Commands::Serve) => web::serve().await,
         Some(Commands::Time) => {
@@ -200,6 +203,11 @@ enum AdjustmentCommands {
         /// The comment of the adjustment.
         #[arg(short, long)]
         comment: Option<String>,
+    },
+    /// Deletes the adjustment with the given ID.
+    Delete {
+        /// The ID of the adjustment to delete.
+        id: u64,
     },
 }
 

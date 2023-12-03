@@ -127,6 +127,25 @@ pub fn get_adjustments(
         .expect("Error loading adjustments")
 }
 
+/// Returns a single adjustment.
+pub fn get_adjustment(connection: &mut MysqlConnection, id: u64) -> Option<Adjustment> {
+    use crate::schema::adjustment::dsl::adjustment;
+
+    adjustment
+        .find(id)
+        .select(Adjustment::as_select())
+        .first(connection)
+        .optional()
+        .expect("Error loading adjustment")
+}
+
+/// Deletes the adjustment with the given ID.
+pub fn delete_adjustment(connection: &mut MysqlConnection, id: u64) -> usize {
+    diesel::delete(crate::schema::adjustment::table.find(id))
+        .execute(connection)
+        .expect("Error deleting adjustment")
+}
+
 /// Adds a new adjustment.
 pub fn add_adjustment(
     connection: &mut MysqlConnection,
@@ -540,6 +559,84 @@ mod tests {
             for adjustment in adjustments {
                 assert_eq!(adjustment.adjustment_type_id, adjustment_types[2].id);
             }
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_get_adjustment() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Initially there are no adjustments. None is returned.
+            let adjustment = get_adjustment(conn, 1);
+            assert!(adjustment.is_none());
+
+            // Create an adjustment type.
+            add_adjustment_type(conn, "Test".to_string(), 1);
+
+            // Retrieve the created adjustment type so we know its ID.
+            let adjustment_types = get_adjustment_types(conn, None);
+            let adjustment_type = adjustment_types.last().unwrap();
+
+            // Create an adjustment.
+            let created = chrono::NaiveDate::from_ymd_opt(2023, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap();
+            let rows_inserted = add_adjustment(
+                conn,
+                adjustment_type,
+                &Some("Test".to_string()),
+                &Some(created),
+            );
+            assert_eq!(rows_inserted, 1);
+
+            // Now there should be 1 adjustment.
+            let adjustments = get_adjustments(conn, &AdjustmentQueryFilter::default());
+            assert_eq!(adjustments.len(), 1);
+
+            // Retrieve the created adjustment so we know its ID.
+            let adjustment = adjustments.last().unwrap();
+
+            // Retrieve the adjustment and check that it has the correct adjustment type ID, comment
+            // and creation date.
+            let adjustment = get_adjustment(conn, adjustment.id).unwrap();
+            assert_eq!(adjustment.adjustment_type_id, adjustment_type.id);
+            assert_eq!(adjustment.comment, Some("Test".to_string()));
+            assert_eq!(adjustment.created, created);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_delete_adjustment() {
+        let pool = setup();
+        let mut conn = pool.get().unwrap();
+        conn.test_transaction::<_, Error, _>(|conn| {
+            // Try to delete a non-existing adjustment. This should return 0 deleted rows.
+            let rows_deleted = delete_adjustment(conn, 1);
+            assert_eq!(rows_deleted, 0);
+
+            // Create an adjustment type and retrieve it so we know its ID.
+            add_adjustment_type(conn, "Test".to_string(), 1);
+            let adjustment_types = get_adjustment_types(conn, Some(10));
+            let adjustment_type = adjustment_types.last().unwrap();
+
+            // Create an adjustment and retrieve it so we know its ID.
+            add_adjustment(conn, adjustment_type, &Some("Test".to_string()), &None);
+            let adjustments = get_adjustments(conn, &AdjustmentQueryFilter::default());
+            let adjustment = adjustments.last().unwrap();
+
+            // Delete the adjustment. One record should have been deleted.
+            let rows_deleted = delete_adjustment(conn, adjustment.id);
+            assert_eq!(rows_deleted, 1);
+
+            // Now there should be no adjustments left.
+            let adjustments = get_adjustments(conn, &AdjustmentQueryFilter::default());
+            assert!(adjustments.is_empty());
 
             Ok(())
         });
